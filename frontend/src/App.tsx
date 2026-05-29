@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, BookOpenText, Trash2, Home, MessageSquare, Image, PanelLeftClose, PanelLeftOpen, KeyRound, ExternalLink, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, BookOpenText, Trash2, Home, MessageSquare, Image, PanelLeftClose, PanelLeftOpen, KeyRound, ExternalLink, X, LogOut } from 'lucide-react';
 import ChatPanel from './components/ChatPanel';
 import MangaPanel from './components/MangaPanel';
 import HomePage from './components/HomePage';
+import LoginPage from './components/LoginPage';
 import {
   listChapters,
   listStories,
@@ -17,6 +18,10 @@ import {
   API_KEY_CHANGE_EVENT,
   DEEPSEEK_USAGE_URL,
   IMAGE2_CONSOLE_URL,
+  isAuthenticated,
+  logoutUser,
+  clearAuth,
+  getUser,
 } from './api';
 
 type View = 'home' | 'editor';
@@ -240,6 +245,7 @@ function ApiKeyButton({ onClick, compact = false }: { onClick: () => void; compa
 }
 
 function App() {
+  const [authenticated, setAuthenticated] = useState(isAuthenticated);
   const isMobile = useIsMobile();
   const [view, setView] = useState<View>('home');
   const [story, setStory] = useState<Story | null>(null);
@@ -274,6 +280,12 @@ function App() {
   const [creatingChapter, setCreatingChapter] = useState(false);
 
   // ─── Restore session from localStorage on mount ─────────
+  useEffect(() => {
+    const onAuthExpired = () => setAuthenticated(false);
+    window.addEventListener('artverse:auth-expired', onAuthExpired);
+    return () => window.removeEventListener('artverse:auth-expired', onAuthExpired);
+  }, []);
+
   useEffect(() => {
     const savedStoryId = localStorage.getItem(LS_STORY_ID);
     if (!savedStoryId) {
@@ -445,6 +457,11 @@ function App() {
     </aside>
   );
 
+  // ─── Auth gate ─────────────────────────────────────────
+  if (!authenticated) {
+    return <LoginPage onAuthSuccess={() => setAuthenticated(true)} />;
+  }
+
   // ─── Loading ───────────────────────────────────────────
   if (loading) {
     return (
@@ -461,7 +478,15 @@ function App() {
   if (view === 'home') {
     return (
       <>
-        <div className="fixed bottom-4 right-4 z-40">
+        <div className="fixed top-4 right-4 z-40 flex items-center gap-2">
+          <span className="text-xs text-gray-600">{getUser()?.username ?? ''}</span>
+          <button
+            onClick={async () => { await logoutUser(); setAuthenticated(false); }}
+            className="p-1.5 text-gray-600 hover:text-rose-400 rounded-lg hover:bg-gray-800 transition-colors"
+            title="登出"
+          >
+            <LogOut size={14} />
+          </button>
           <ApiKeyButton onClick={() => setApiKeyModalOpen(true)} />
         </div>
         <HomePage onSelectStory={enterStory} />
@@ -502,6 +527,14 @@ function App() {
         </div>
         <div className="flex items-center gap-2 text-xs text-gray-500 shrink-0">
           <ApiKeyButton onClick={() => setApiKeyModalOpen(true)} compact={isMobile} />
+          <span className="text-gray-600">{getUser()?.username ?? ''}</span>
+          <button
+            onClick={async () => { await logoutUser(); setAuthenticated(false); }}
+            className="p-1.5 text-gray-600 hover:text-rose-400 rounded-lg hover:bg-gray-800 transition-colors"
+            title="登出"
+          >
+            <LogOut size={14} />
+          </button>
           <span>第 {currentChapter?.chapter_number ?? '–'} 话</span>
           {!isMobile && <span>·</span>}
           {!isMobile && <span>共 {chapters.length} 话</span>}

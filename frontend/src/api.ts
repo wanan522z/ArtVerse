@@ -1,17 +1,120 @@
 const BASE = '';
-const API_TOKEN = import.meta.env.VITE_API_TOKEN as string | undefined;
 export const DEEPSEEK_USAGE_URL = 'https://platform.deepseek.com/usage';
 export const IMAGE2_CONSOLE_URL = 'https://api.duojie.games/console/token';
+
+// ─── Auth (JWT) ──────────────────────────────────────────────
+
+const LS_ACCESS_TOKEN = 'artverse.accessToken';
+const LS_REFRESH_TOKEN = 'artverse.refreshToken';
+const LS_USER = 'artverse.user';
+
+export interface UserInfo {
+  id: number;
+  username: string;
+  email: string;
+}
+
+function getAccessToken(): string | null {
+  return localStorage.getItem(LS_ACCESS_TOKEN);
+}
+
+function getRefreshToken(): string | null {
+  return localStorage.getItem(LS_REFRESH_TOKEN);
+}
+
+export function getUser(): UserInfo | null {
+  const raw = localStorage.getItem(LS_USER);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+export function isAuthenticated(): boolean {
+  return !!getAccessToken();
+}
+
+function saveAuth(data: { access_token: string; refresh_token: string; user: UserInfo }): void {
+  localStorage.setItem(LS_ACCESS_TOKEN, data.access_token);
+  localStorage.setItem(LS_REFRESH_TOKEN, data.refresh_token);
+  localStorage.setItem(LS_USER, JSON.stringify(data.user));
+}
+
+export function clearAuth(): void {
+  localStorage.removeItem(LS_ACCESS_TOKEN);
+  localStorage.removeItem(LS_REFRESH_TOKEN);
+  localStorage.removeItem(LS_USER);
+}
+
+let refreshPromise: Promise<boolean> | null = null;
+
+async function tryRefreshToken(): Promise<boolean> {
+  const rt = getRefreshToken();
+  if (!rt) return false;
+
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        const res = await fetch(`${BASE}/api/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: rt }),
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        localStorage.setItem(LS_ACCESS_TOKEN, data.access_token);
+        return true;
+      } catch {
+        return false;
+      }
+    })();
+  }
+  const ok = await refreshPromise;
+  refreshPromise = null;
+  return ok;
+}
+
+export async function loginUser(username: string, password: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  saveAuth(await res.json());
+}
+
+export async function registerUser(username: string, email: string, password: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, email, password }),
+  });
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  saveAuth(await res.json());
+}
+
+export async function logoutUser(): Promise<void> {
+  const token = getAccessToken();
+  if (token) {
+    try {
+      await fetch(`${BASE}/api/auth/logout`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+    } catch { /* ignore */ }
+  }
+  clearAuth();
+}
+
+// ─── API key settings ────────────────────────────────────────
+
+const LS_DEEPSEEK_API_KEY = 'lorevista.deepseekApiKey';
+const LS_IMAGE_API_KEY = 'lorevista.imageApiKey';
+export const API_KEY_CHANGE_EVENT = 'lorevista:api-key-change';
 
 export interface ApiKeySettings {
   deepseekApiKey: string;
   imageApiKey: string;
 }
-
-// Stored in localStorage so multiple tabs share the same API key settings.
-const LS_DEEPSEEK_API_KEY = 'lorevista.deepseekApiKey';
-const LS_IMAGE_API_KEY = 'lorevista.imageApiKey';
-export const API_KEY_CHANGE_EVENT = 'lorevista:api-key-change';
 
 export function getApiKeySettings(): ApiKeySettings {
   return {
@@ -27,25 +130,50 @@ export function saveApiKeySettings(settings: ApiKeySettings): void {
   else localStorage.removeItem(LS_DEEPSEEK_API_KEY);
   if (image) localStorage.setItem(LS_IMAGE_API_KEY, image);
   else localStorage.removeItem(LS_IMAGE_API_KEY);
-  // Notify same-tab listeners. Other tabs receive the browser 'storage' event.
-  try {
-    window.dispatchEvent(new Event(API_KEY_CHANGE_EVENT));
-  } catch {
-    // SSR / non-browser environment — ignore.
-  }
+  try { window.dispatchEvent(new Event(API_KEY_CHANGE_EVENT)); } catch { /* ignore */ }
 }
 
 export function clearApiKeySettings(): void {
   saveApiKeySettings({ deepseekApiKey: '', imageApiKey: '' });
 }
 
+export async function getUserApiKeys(): Promise<{ provider: string; api_key_masked: string }[]> {
+  const res = await authFetch(`${BASE}/api/user/api-keys`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function saveUserApiKey(provider: string, apiKey: string): Promise<void> {
+  const res = await authFetch(`${BASE}/api/user/api-keys`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, api_key: apiKey }),
+  });
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+}
+
+// ─── Auth-aware fetch ────────────────────────────────────────
+
 function apiHeaders(json = false): HeadersInit {
-  const keys = getApiKeySettings();
+  const token = getAccessToken();
   return {
     ...(json ? { 'Content-Type': 'application/json' } : {}),
-    ...(API_TOKEN ? { 'X-API-Token': API_TOKEN } : {}),
-    ...(keys.imageApiKey ? { 'X-Image-API-Key': keys.imageApiKey } : {}),
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
   };
+}
+
+async function authFetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  let res = await fetch(input, { ...init, headers: { ...apiHeaders(), ...(init?.headers || {}) } });
+  if (res.status === 401) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      res = await fetch(input, { ...init, headers: { ...apiHeaders(), ...(init?.headers || {}) } });
+    } else {
+      clearAuth();
+      window.dispatchEvent(new CustomEvent('artverse:auth-expired'));
+    }
+  }
+  return res;
 }
 
 export interface Story {
@@ -89,9 +217,9 @@ export interface Chapter {
 // ─── Story ──────────────────────────────────────────────────
 
 export async function createStory(title: string = '未命名故事', description: string = ''): Promise<Story> {
-  const res = await fetch(`${BASE}/api/stories`, {
+  const res = await authFetch(`${BASE}/api/stories`, {
     method: 'POST',
-    headers: apiHeaders(true),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title, description }),
   });
   if (!res.ok) throw new Error(await res.text());
@@ -99,7 +227,7 @@ export async function createStory(title: string = '未命名故事', description
 }
 
 export async function listStories(): Promise<Story[]> {
-  const res = await fetch(`${BASE}/api/stories`, { headers: apiHeaders() });
+  const res = await authFetch(`${BASE}/api/stories`);
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
