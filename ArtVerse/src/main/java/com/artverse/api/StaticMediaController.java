@@ -36,7 +36,25 @@ public class StaticMediaController {
             return;
         }
 
-        response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+        serveMinioObject(path, response);
+    }
+
+    private void serveMinioObject(String objectKey, HttpServletResponse response) {
+        try (InputStream in = objectStorageService.get(properties.getMinio().getBucket(), objectKey);
+             OutputStream out = response.getOutputStream()) {
+            response.setContentType(contentTypeFor(objectKey));
+            in.transferTo(out);
+        } catch (Exception e) {
+            log.warn("Failed to serve MinIO object {}: {}", objectKey, e.getMessage());
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+        }
+    }
+
+    private String contentTypeFor(String path) {
+        String lower = path.toLowerCase();
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return MediaType.IMAGE_JPEG_VALUE;
+        if (lower.endsWith(".webp")) return "image/webp";
+        return MediaType.IMAGE_PNG_VALUE;
     }
 
     private void serveLocalFile(Path path, HttpServletResponse response) {

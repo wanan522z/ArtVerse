@@ -1,7 +1,7 @@
 package com.artverse.api;
 
+import com.artverse.api.dto.ChapterDto;
 import com.artverse.application.NovelService;
-import com.artverse.domain.Chapter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,7 +21,7 @@ public class NovelController {
     }
 
     @PostMapping("/import-novel")
-    public Chapter importNovel(@PathVariable Long chapterId, @RequestBody Map<String, String> body) {
-        return novelService.importNovel(chapterId, body.get("content"));
+    public ChapterDto importNovel(@PathVariable Long chapterId, @RequestBody Map<String, String> body) {
+        return ChapterDto.from(novelService.importNovel(chapterId, body.get("content")));
     }
 }

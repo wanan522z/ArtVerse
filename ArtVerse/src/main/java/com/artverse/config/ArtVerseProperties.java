@@ -29,13 +29,13 @@ public class ArtVerseProperties {
 
     @Data
     public static class Upload {
-        private long maxImageBytes = 10485760;
+        private long maxImageBytes = 10485760;//10MB
     }
 
     @Data
     public static class ImportConfig {
-        private long maxZipBytes = 524288000;
-        private int maxNovelChars = 50000;
+        private long maxZipBytes = 524288000;//500MB
+        private int maxNovelChars = 50000;//50K
     }
 
     @Data

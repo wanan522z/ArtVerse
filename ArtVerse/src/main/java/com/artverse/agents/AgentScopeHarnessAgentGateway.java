@@ -15,6 +15,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,7 +44,7 @@ public class AgentScopeHarnessAgentGateway implements HarnessAgentGateway {
     public Flux<String> streamChat(AgentRunRequest request) {
         HarnessAgent agent = getOrCreateAgent(request);
         RuntimeContext ctx = buildRuntimeContext(request);
-        List<Msg> messages = convertMessages(request);
+        List<Msg> messages = convertMessages(prepareInputMessages(request));
 
         AtomicBoolean hasEmitted = new AtomicBoolean(false);
 
@@ -68,7 +69,7 @@ public class AgentScopeHarnessAgentGateway implements HarnessAgentGateway {
     public Mono<String> generateText(AgentRunRequest request) {
         HarnessAgent agent = getOrCreateAgent(request);
         RuntimeContext ctx = buildRuntimeContext(request);
-        List<Msg> messages = convertMessages(request);
+        List<Msg> messages = convertMessages(prepareInputMessages(request));
 
         return agent.call(messages, ctx)
                 .map(Msg::getTextContent);
@@ -97,8 +98,35 @@ public class AgentScopeHarnessAgentGateway implements HarnessAgentGateway {
                 .build();
     }
 
-    private List<Msg> convertMessages(AgentRunRequest request) {
-        return request.messages().stream()
+    static List<AgentMessage> prepareInputMessages(AgentRunRequest request) {
+        List<String> systemMessages = new ArrayList<>();
+        List<AgentMessage> inputMessages = new ArrayList<>();
+
+        for (AgentMessage message : request.messages()) {
+            if ("system".equalsIgnoreCase(message.role())) {
+                systemMessages.add(message.content());
+            } else {
+                inputMessages.add(message);
+            }
+        }
+
+        if (systemMessages.isEmpty()) {
+            return inputMessages;
+        }
+
+        String systemPrompt = String.join("\n\n", systemMessages);
+        if (inputMessages.isEmpty()) {
+            return List.of(new AgentMessage("user", systemPrompt));
+        }
+
+        AgentMessage first = inputMessages.get(0);
+        List<AgentMessage> prepared = new ArrayList<>(inputMessages);
+        prepared.set(0, new AgentMessage(first.role(), systemPrompt + "\n\n" + first.content()));
+        return prepared;
+    }
+
+    private List<Msg> convertMessages(List<AgentMessage> messages) {
+        return messages.stream()
                 .map(m -> Msg.builder()
                         .role(convertRole(m.role()))
                         .textContent(m.content())

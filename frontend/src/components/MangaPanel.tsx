@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronUp, ChevronDown, Download, ImageIcon, Loader2, Sparkles, Pencil, RefreshCw, Check, X, ImagePlus, Trash2, Square } from 'lucide-react';
 import {
   generateMangaStream,
-  generateScenes,
   getScenes,
   updateScenes,
   regenerateImage,
@@ -20,6 +19,7 @@ import {
   setImageCount,
   ALLOWED_IMAGE_COUNTS,
   mangaImageUrl,
+  refImageUrl,
   mangaThumbUrl,
   type Chapter,
   type MangaProgress,
@@ -181,6 +181,7 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
       img,
     }));
   const lightboxImg = lightboxIdx >= 0 ? displayImages[lightboxIdx] : null;
+  const hasSourceContent = !!chapter && ((chapter.messages?.length ?? 0) > 0 || !!chapter.novel_content?.trim());
 
   const refreshChapterAssetFallback = async (chapterId: number) => {
     const [chars, refs] = await Promise.all([getCharacters(chapterId), getChapterRefImages(chapterId)]);
@@ -213,34 +214,15 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
   // ── Scene generation ──
   const handleGenerateScenes = async () => {
     if (!chapter) return;
-    if (!chapter.messages || chapter.messages.length === 0) {
-      alert('请先在左侧进行对话');
+    if (!hasSourceContent) {
+      alert('请先在左侧进行对话或导入小说');
       return;
     }
-    setPhase('generating-scenes');
-    setErrorMsg('');
-    const controller = new AbortController();
-    sceneAbortRef.current = controller;
-    const requestId = chapterLoadRequestRef.current;
-    const hadScenes = scenes.length > 0;
-    try {
-      const result = await generateScenes(chapter.id, controller.signal);
-      if (chapterLoadRequestRef.current !== requestId) return;
-      setScenes(result);
-      setPhase('editing-scenes');
-    } catch (err: any) {
-      if (chapterLoadRequestRef.current !== requestId) return;
-      if (err.name === 'AbortError') {
-        setPhase(hadScenes ? 'editing-scenes' : 'idle');
-      } else {
-        setErrorMsg(err.message);
-        setPhase(hadScenes ? 'editing-scenes' : 'idle');
-      }
-    } finally {
-      if (sceneAbortRef.current === controller) {
-        sceneAbortRef.current = null;
-      }
+    if (scenes.length > 0) {
+      await startImageGeneration(scenes);
+      return;
     }
+    await startImageGeneration([]);
   };
 
   const handleAbortScenes = () => {
@@ -335,23 +317,28 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
 
   // ── Image generation ──
 
-  const handleGenerateImages = async () => {
+  const startImageGeneration = async (sourceScenes: string[]) => {
     if (!chapter) return;
-    // Already generating for this chapter — ignore
     if (genStore.get(chapter.id)?.active) return;
-    // Save scenes first
-    try {
-      await updateScenes(chapter.id, scenes);
-    } catch (err: any) {
-      setErrorMsg(`保存分镜失败: ${err.message}`);
-      return;
+    if (sourceScenes.length > 0) {
+      try {
+        await updateScenes(chapter.id, sourceScenes);
+      } catch (err: any) {
+        setErrorMsg(`保存分镜失败: ${err.message}`);
+        setStatusMsg('');
+        setPhase('editing-scenes');
+        return;
+      }
     }
 
     setImages([]);
     setErrorMsg('');
+    setPhase('generating-images');
 
     const targetId = chapter.id;
     const targetTotal = imageCount;
+    setProgress({ current: 0, total: targetTotal });
+    setStatusMsg('正在生成漫画…');
     genStore.start(targetId, targetTotal);
 
     const controller = generateMangaStream(targetId, (event: MangaProgress) => {
@@ -370,26 +357,33 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
           genStore.pushImage(targetId, {
             image_number: event.data.image_number,
             image_path: event.data.image_path,
-            prompt: event.data.prompt ?? scenes[event.data.image_number - 1] ?? '',
+            prompt: event.data.prompt ?? sourceScenes[event.data.image_number - 1] ?? '',
           });
           if (event.data.image_number >= targetTotal) {
             mangaAbortRef.current.delete(targetId);
             genStore.finish(targetId);
+            setPhase('editing-scenes');
           }
           break;
         case 'done':
           mangaAbortRef.current.delete(targetId);
           genStore.finish(targetId);
+          setPhase('editing-scenes');
           onChapterRefresh?.(targetId);
           setTimeout(() => genStore.clear(targetId), 800);
           break;
         case 'error':
           mangaAbortRef.current.delete(targetId);
           genStore.finish(targetId, event.data.detail || event.data.error || '未知错误');
+          setPhase('editing-scenes');
           break;
       }
     });
     mangaAbortRef.current.set(targetId, controller);
+  };
+
+  const handleGenerateImages = async () => {
+    await startImageGeneration(scenes);
   };
 
   const handleAbortManga = () => {
@@ -401,6 +395,7 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
     if (state?.images.length) {
       setImages(state.images);
     }
+    setPhase(state?.images.length ? 'editing-scenes' : 'idle');
     genStore.finish(targetId, '已中止生成');
     window.setTimeout(() => onChapterRefresh?.(targetId), 700);
   };
@@ -581,7 +576,7 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
           {!generating && (phase === 'idle' || phase === 'editing-scenes') && (
             <button
               onClick={handleGenerateScenes}
-              disabled={!chapter || !chapter?.messages?.length}
+              disabled={!hasSourceContent}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md
                          bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-40
                          disabled:cursor-not-allowed transition-colors"
@@ -894,7 +889,7 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
         {displayImages.length === 0 && !generating && scenes.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-gray-600 gap-3">
             <ImageIcon size={48} strokeWidth={1} />
-            <span className="text-sm">对话后点击上方按钮生成分镜</span>
+            <span className="text-sm">对话或导入小说后点击上方按钮生成分镜</span>
           </div>
         )}
 
@@ -1117,7 +1112,7 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
                       className="relative group aspect-square rounded-lg overflow-hidden border border-gray-800 bg-gray-950"
                     >
                       <img
-                        src={mangaThumbUrl(img.image_path, 480, img.filename)!}
+                        src={refImageUrl(img.image_path)}
                         alt={img.filename}
                         className="w-full h-full object-cover"
                         loading="lazy"

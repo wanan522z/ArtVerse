@@ -19,13 +19,15 @@ spring:
     redis:
       host: localhost
       port: 6379
+      database: 0
+      timeout: 5000
 
 artverse:
   cors-origins:
     - http://localhost:5173
     - http://127.0.0.1:5173
   jwt:
-    secret: "artverse-jwt-secret-key-must-be-at-least-256-bits-long!!"
+    secret: "artverse-jwt-be-at-least-256-bits-long!!"
     access-ttl: 30m
     refresh-ttl: 1d
   storage:

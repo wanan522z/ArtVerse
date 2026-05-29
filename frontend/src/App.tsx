@@ -20,7 +20,6 @@ import {
   IMAGE2_CONSOLE_URL,
   isAuthenticated,
   logoutUser,
-  clearAuth,
   getUser,
 } from './api';
 

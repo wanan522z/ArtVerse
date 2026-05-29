@@ -10,6 +10,10 @@ target/
 dist/
 node_modules/
 
+# Claude Code
+.claude/
+.playwright-cli/
+
 # OS files
 .DS_Store
 Thumbs.db

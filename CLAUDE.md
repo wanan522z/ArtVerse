@@ -102,8 +102,8 @@ Frontend runs on `http://localhost:5173`
 - `GET/PUT /api/chapters/{id}/asset-group` - Chapter asset group
 - `POST /api/chapters/{id}/chat` - AI chat for chapter
 - `POST /api/chapters/{id}/import-novel` - Import novel content
-- `POST /api/chapters/{id}/generate-scenes` - Generate scenes from novel
-- `POST /api/chapters/{id}/generate-manga` - Generate manga images
+- `POST /api/chapters/{id}/generate-scenes` - Generate optional storyboard scene text from novel/chat source content
+- `POST /api/chapters/{id}/generate-manga-stream` - Generate manga images via SSE from saved storyboard scenes or directly from novel/chat source content
 - `GET/POST/DELETE /api/stories/{id}/ref-images` - Story-level reference images
 - `GET/POST/DELETE /api/chapters/{id}/ref-images` - Chapter-level reference images
 - `GET/POST/DELETE /api/stories/{id}/asset-groups/{groupId}/ref-images` - Asset group ref images
@@ -137,6 +137,10 @@ Use Playwright CLI skill for browser automation testing.
 - **SSE event deduplication**: When handling streaming events, use guard flags to prevent duplicate callback triggers (e.g. don't call `onChapterRefresh` from both the last `image` event and the `done` event).
 - **Always use `authFetch` for authenticated API calls**: Every API call that requires authentication MUST use `authFetch()`, never raw `fetch()` + `apiHeaders()`. `authFetch` handles 401 responses by automatically refreshing the access token and retrying. Raw `fetch` with `apiHeaders()` has no JWT refresh logic — when the 30-minute access token expires, the call fails with "JWT expired". Only `loginUser`, `registerUser`, and `tryRefreshToken` should use raw `fetch` (they don't need auth). `exportStory` (blob download) is the only exception for an authenticated endpoint. `importStoryPackage` (XHR) must handle 401 + token refresh in its `onload` callback.
 
+- **Storage boundaries**: Final app image/reference storage must use MinIO object keys (`stories/...`). Do not introduce persistent `manga_outputs` writes except short-lived temp files required by upstream APIs.
+- **Reference image display**: Reference-image UI should display MinIO-backed `image_path` via `/static/manga/{image_path}` (`refImageUrl`) unless a thumbnail endpoint is explicitly implemented for MinIO. Do not point MinIO ref images at `/_thumb/...` routes unless the backend route exists; otherwise upload can succeed while the UI appears empty/broken.
+- **Scene-to-image flow**: In the manga panel, the visible `生成分镜` action is expected to produce images. If saved storyboard scenes exist, start `/generate-manga-stream` with those scenes; if scenes are missing or text storyboard JSON parsing fails, do not block image generation — `/generate-manga-stream` must fall back to novel/chat source content and use the configured Image2 model (`gpt-image-2`).
+
 ### Java/Spring Boot
 - **Lazy proxy safety**: When accessing lazy-loaded JPA relationships in DTOs (`@ManyToOne(fetch = LAZY)`), always wrap in try-catch with a fallback, consistent with `safeMessages()`/`safeImages()` pattern in `ChapterDto.java`.
 - **Lazy entity serialization**: When a JPA entity has `@ManyToOne(fetch = LAZY)` and is returned directly from a controller (not via DTO), add `@JsonIgnore` to the lazy field. Otherwise Jackson triggers `LazyInitializationException` outside the transaction boundary. See `Chapter.story` and `StoryAssetGroup.story` for the correct pattern.
@@ -144,7 +148,7 @@ Use Playwright CLI skill for browser automation testing.
 - **Jackson `@RequestBody` type mapping**: Jackson parses JSON integers as `Long`, not `Integer`. Never use `Map<String, Integer>` as `@RequestBody` — use `Map<String, Object>` and cast with `((Number) val).intValue()`. Otherwise deserialization fails silently with a 500 error.
 - **DB CHECK constraints must have service-level validation**: When a database column has a CHECK constraint (e.g. `image_count IN (4, 6, 8, 10, 12, 15, 20)`), always validate in the service layer before `save()` to return a proper 400 error instead of a 500 `DataIntegrityViolationException`.
 - **Internal method calls bypass `@Transactional` proxy**: When a controller method calls another `@Transactional` method on the same class (e.g. `setAssetGroup` calling `getAssetGroup`), the call goes directly to the method, not through Spring's proxy. If the called method accesses lazy-loaded JPA relationships, the calling method must also be annotated with `@Transactional` to keep the Hibernate session open.
-- **AgentScope Harness usage**: All text/chat AI goes through `HarnessAgentGateway` interface. Use `HarnessAgent.builder()` with `.model(openAIChatModel)`, `.workspace(path)`, `.compaction(config)` to create agents. Build one agent per story (cache by story ID). Use `RuntimeContext.builder().sessionId().userId().build()` for per-call identity. Convert `AgentMessage` to `Msg.builder().role(MsgRole.USER/ASSISTANT/SYSTEM).textContent().build()`.
+- **AgentScope Harness input messages**: Never send `MsgRole.SYSTEM` inside `HarnessAgent.call()/stream()` input message lists. AgentScope Harness hooks reject SYSTEM messages in `PreCallEvent.inputMessages` with `Hooks must not inject SYSTEM messages...`. Keep the base system prompt in `HarnessAgent.builder().sysPrompt(...)`; if task-specific system instructions come from services, merge them into the first user message before converting to `Msg`.
 - **AgentScope model configuration**: `OpenAIChatModel.builder().apiKey().modelName().baseUrl().stream(true).build()`. For DeepSeek, base URL is `https://api.deepseek.com`. API key read from `ArtVerseProperties.deepseek.apiKey` or `DEEPSEEK_API_KEY` env var via Dotenv.
 - **Don't create custom adapters**: `OpenAIChatModel` already supports any OpenAI-compatible API. No need to write custom `ChatModel` adapters like the old `DeepSeekModelAdapter`.
 - **Streaming event filtering**: When using `HarnessAgent.stream()`, filter out `EventType.AGENT_RESULT` events. For `isLast()` events, use a stateful `AtomicBoolean` to track whether any token has already been emitted — only suppress `isLast()` when prior tokens exist. Unconditional `!e.isLast()` drops single-event short responses (e.g. "好"). The correct pattern: filter non-AGENT_RESULT → use `AtomicBoolean hasEmitted` → skip `isLast()` only if `hasEmitted` is true.
@@ -172,3 +176,33 @@ Key patterns from 23 fixes:
 - **Cleanup**: Remove dead parameters from entire call chain (controller→service). Don't leak API keys on every request header. Use `??` not `||` for nullish values. Don't duplicate SSE event callbacks.
 - **Java immutability**: `Map.of()` / `List.of()` return immutable collections — never call `.put()` / `.add()`. Use `new HashMap<>()` for mutable maps.
 - **JWT auth in frontend**: All authenticated API calls must use `authFetch()` — raw `fetch` + `apiHeaders()` has no token refresh logic. After 30 min, the access token expires and every raw fetch fails. Only `loginUser`/`registerUser`/`tryRefreshToken` skip `authFetch`.
+
+## Session Context Summary (2026-05-29 continued)
+
+This session fixed cross-cutting storage/UI contract bugs in ArtVerse and consolidated the final working state here.
+
+**Verified working status**
+- Backend Java unit tests: PASS (`mvn test`).
+- Frontend TypeScript/Vite build: PASS (`npm run build`).
+- Java review + React review were executed; critical/important findings were addressed.
+
+**What was fixed**
+- Generated manga images now upload directly to MinIO from the Image2 temp file and store `stories/...` object keys as `imagePath`, instead of persisting final images under `ArtVerse/manga_outputs`.
+- `/static/manga/**` now supports MinIO object-key reads (with legacy local-path fallback), so frontend URLs like `/static/manga/stories/...` render correctly.
+- Story/chapter/asset-group reference images were migrated from local directory storage to MinIO upload/list/delete.
+- `MangaGenerationService` now materializes MinIO ref-image objects to temp files before calling Image2 and cleans them up after use.
+- `import-novel` now returns `ChapterDto` (not raw `Chapter`), fixing the frontend crash `updated.messages.map(...)`.
+- `MangaPanel.tsx` now allows scene generation when the chapter has either chat messages or imported novel content.
+- Updated `CLAUDE.md` storage-boundary rule: final persistent image/reference storage must be MinIO object keys; only short-lived temp files may exist locally for upstream API requirements.
+
+**Latest regression fixes (2026-05-29)**
+- Fixed scene-generation/novel-generation AgentScope failures: task-specific `system` messages are merged into user input before `HarnessAgent.call()/stream()`, so `MsgRole.SYSTEM` is never placed in `PreCallEvent.inputMessages`.
+- Added `AgentScopeHarnessAgentGatewayTest` to prevent reintroducing SYSTEM messages in Harness input.
+- Added `ReferenceImageControllerTest` proving chapter reference image upload writes a `stories/{storyId}/chapters/{chapterId}/ref_images/...` object key and returns it in the API payload.
+- Fixed reference-image previews in `MangaPanel.tsx` and `HomePage.tsx` to use direct `/static/manga/...` URLs instead of the missing `/_thumb/...` thumbnail route.
+- Java review found chapter ref-image POST/DELETE incorrectly marked `@Transactional(readOnly = true)` — changed to `@Transactional` for consistency with other mutating endpoints.
+- Verification run: `mvn -q -f "ArtVerse/pom.xml" -Dtest=AgentScopeHarnessAgentGatewayTest,ReferenceImageControllerTest test` PASS; `npm --prefix frontend run build` PASS.
+
+- Some endpoints related to stories/asset-groups are read-only in this pass; full-write consistency for asset-group lifecycle is not expanded here.
+- Human verification should confirm: novel import, scene generation button enablement, ref image upload/display, manga generation/regeneration display, and MinIO object presence in bucket.
+- The `manga_outputs` directory should not contain new final reference/image files after these changes. Legacy content may still remain from earlier runs.

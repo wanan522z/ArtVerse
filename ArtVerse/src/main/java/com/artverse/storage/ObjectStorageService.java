@@ -4,6 +4,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 
 public interface ObjectStorageService {
@@ -11,6 +12,8 @@ public interface ObjectStorageService {
     StoredObject putPng(String objectKey, Path localFile, String contentType);
 
     InputStream get(String bucket, String objectKey);
+
+    List<StoredObject> list(String bucket, String prefix, int limit);
 
     Optional<URI> publicOrPresignedUrl(String bucket, String objectKey, Duration ttl);
 

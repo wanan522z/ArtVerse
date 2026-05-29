@@ -3,6 +3,7 @@ package com.artverse.storage;
 import com.artverse.config.ArtVerseProperties;
 import io.minio.*;
 import io.minio.http.Method;
+import io.minio.messages.Item;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +14,8 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -71,6 +74,30 @@ public class MinioStorageService implements ObjectStorageService {
             );
         } catch (Exception e) {
             throw new RuntimeException("Failed to get from MinIO: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public List<StoredObject> list(String bucket, String prefix, int limit) {
+        try {
+            List<StoredObject> objects = new ArrayList<>();
+            Iterable<Result<Item>> results = minioClient.listObjects(
+                    ListObjectsArgs.builder()
+                            .bucket(bucket)
+                            .prefix(prefix)
+                            .recursive(true)
+                            .build()
+            );
+            for (Result<Item> result : results) {
+                Item item = result.get();
+                if (!item.isDir()) {
+                    objects.add(new StoredObject(bucket, item.objectName(), "image/png", item.size()));
+                    if (objects.size() >= limit) break;
+                }
+            }
+            return objects;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to list MinIO objects: " + e.getMessage(), e);
         }
     }
 

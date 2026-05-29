@@ -3,19 +3,23 @@ package com.artverse.api;
 import com.artverse.common.BusinessException;
 import com.artverse.config.ArtVerseProperties;
 import com.artverse.domain.Chapter;
-import com.artverse.domain.Story;
 import com.artverse.domain.StoryAssetGroup;
 import com.artverse.media.MediaStorageService;
 import com.artverse.persistence.ChapterRepository;
 import com.artverse.persistence.StoryAssetGroupRepository;
 import com.artverse.persistence.StoryRepository;
+import com.artverse.storage.ObjectStorageService;
+import com.artverse.storage.StoredObject;
 import lombok.RequiredArgsConstructor;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
@@ -26,40 +30,18 @@ public class ReferenceImageController {
     private final ChapterRepository chapterRepository;
     private final StoryAssetGroupRepository assetGroupRepository;
     private final MediaStorageService mediaStorageService;
+    private final ObjectStorageService objectStorageService;
     private final ArtVerseProperties properties;
 
     @Transactional(readOnly = true)
     @GetMapping("/stories/{storyId}/ref-images")
     public Map<String, Object> getStoryRefImages(@PathVariable Long storyId) {
-        Story story = storyRepository.findById(storyId)
+        storyRepository.findById(storyId)
                 .orElseThrow(() -> new BusinessException(404, "Story not found"));
 
-        List<Map<String, Object>> images = new ArrayList<>();
-        Path refDir = mediaStorageService.getStoryDir(storyId).resolve("ref_images");
-        if (Files.exists(refDir)) {
-            try {
-                Files.list(refDir)
-                        .filter(p -> isImageFile(p))
-                        .sorted()
-                        .limit(properties.getRef().getMaxImagesPerLevel())
-                        .forEach(p -> {
-                            String relative = mediaStorageService.toRelativePath(p);
-                            try {
-                                long sizeKb = Files.size(p) / 1024;
-                                images.add(Map.of(
-                                        "filename", p.getFileName().toString(),
-                                        "image_path", relative,
-                                        "size_kb", sizeKb
-                                ));
-                            } catch (Exception ignored) {
-                            }
-                        });
-            } catch (Exception ignored) {
-            }
-        }
-
-        String source = images.isEmpty() ? "none" : "story";
-        return Map.of("images", images, "max", properties.getRef().getMaxImagesPerLevel(), "source", source);
+        Map<String, Object> result = listImages(storyRefPrefix(storyId));
+        result.put("source", imagesEmpty(result) ? "none" : "story");
+        return result;
     }
 
     @Transactional(readOnly = true)
@@ -68,148 +50,49 @@ public class ReferenceImageController {
         Chapter chapter = chapterRepository.findById(chapterId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
 
-        List<Map<String, Object>> images = new ArrayList<>();
-        String source = "none";
+        Map<String, Object> result = listImages(chapterRefPrefix(chapter));
+        if (!imagesEmpty(result)) {
+            result.put("source", "chapter");
+            return result;
+        }
 
-        // Helper to add image entry
-        java.util.function.BiConsumer<Path, String> addImage = (p, relative) -> {
-            try {
-                long sizeKb = Files.size(p) / 1024;
-                images.add(Map.of(
-                        "filename", p.getFileName().toString(),
-                        "image_path", relative,
-                        "size_kb", sizeKb
-                ));
-            } catch (Exception ignored) {
-            }
-        };
+        if (chapter.getRefImage() != null && !chapter.getRefImage().isBlank()) {
+            result = legacyImage(chapter.getRefImage());
+            result.put("source", "chapter");
+            return result;
+        }
 
-        // Chapter ref images
-        Path refDir = mediaStorageService.getChapterDir(chapterId).resolve("ref_images");
-        if (Files.exists(refDir)) {
-            try {
-                Files.list(refDir)
-                        .filter(p -> isImageFile(p))
-                        .sorted()
-                        .limit(properties.getRef().getMaxImagesPerLevel())
-                        .forEach(p -> {
-                            String relative = mediaStorageService.toRelativePath(p);
-                            addImage.accept(p, relative);
-                        });
-            } catch (Exception ignored) {
+        if (chapter.getAssetGroup() != null) {
+            result = listImages(assetGroupRefPrefix(chapter.getStory().getId(), chapter.getAssetGroup().getId()));
+            if (!imagesEmpty(result)) {
+                result.put("source", "asset_group");
+                return result;
             }
         }
-        if (!images.isEmpty()) {
-            source = "chapter";
+
+        result = listImages(storyRefPrefix(chapter.getStory().getId()));
+        if (!imagesEmpty(result)) {
+            result.put("source", "story");
+            return result;
         }
 
-        // Chapter old single ref
-        if (images.isEmpty() && chapter.getRefImage() != null && !chapter.getRefImage().isBlank()) {
-            images.add(Map.of("filename", Path.of(chapter.getRefImage()).getFileName().toString(), "image_path", chapter.getRefImage(), "size_kb", 0));
-            source = "chapter";
+        if (chapter.getStory().getRefImage() != null && !chapter.getStory().getRefImage().isBlank()) {
+            result = legacyImage(chapter.getStory().getRefImage());
+            result.put("source", "story");
+            return result;
         }
 
-        // Asset group refs
-        if (images.isEmpty() && chapter.getAssetGroup() != null) {
-            Path groupRefDir = mediaStorageService.getAssetGroupDir(chapter.getAssetGroup().getId()).resolve("ref_images");
-            if (Files.exists(groupRefDir)) {
-                try {
-                    Files.list(groupRefDir)
-                            .filter(p -> isImageFile(p))
-                            .sorted()
-                            .limit(properties.getRef().getMaxImagesPerLevel())
-                            .forEach(p -> {
-                                String relative = mediaStorageService.toRelativePath(p);
-                                addImage.accept(p, relative);
-                            });
-                } catch (Exception ignored) {
-                }
-            }
-            if (!images.isEmpty()) source = "asset_group";
-        }
-
-        // Story refs
-        if (images.isEmpty()) {
-            Path storyRefDir = mediaStorageService.getStoryDir(chapter.getStory().getId()).resolve("ref_images");
-            if (Files.exists(storyRefDir)) {
-                try {
-                    Files.list(storyRefDir)
-                            .filter(p -> isImageFile(p))
-                            .sorted()
-                            .limit(properties.getRef().getMaxImagesPerLevel())
-                            .forEach(p -> {
-                                String relative = mediaStorageService.toRelativePath(p);
-                                addImage.accept(p, relative);
-                            });
-                } catch (Exception ignored) {
-                }
-            }
-            if (!images.isEmpty()) source = "story";
-        }
-
-        // Story old single ref
-        if (images.isEmpty() && chapter.getStory().getRefImage() != null && !chapter.getStory().getRefImage().isBlank()) {
-            String ref = chapter.getStory().getRefImage();
-            images.add(Map.of("filename", Path.of(ref).getFileName().toString(), "image_path", ref, "size_kb", 0));
-            source = "story";
-        }
-
-        return Map.of("images", images, "max", properties.getRef().getMaxImagesPerLevel(), "source", source);
-    }
-
-    private boolean isImageFile(Path p) {
-        String name = p.getFileName().toString().toLowerCase();
-        return name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp");
-    }
-
-    // ─── Upload helpers ────────────────────────────────────────
-
-    private Map<String, Object> listImagesInDir(Path refDir, int max) {
-        List<Map<String, Object>> images = new ArrayList<>();
-        if (Files.exists(refDir)) {
-            try {
-                Files.list(refDir)
-                        .filter(this::isImageFile)
-                        .sorted()
-                        .limit(max)
-                        .forEach(p -> {
-                            String relative = mediaStorageService.toRelativePath(p);
-                            try {
-                                long sizeKb = Files.size(p) / 1024;
-                                images.add(Map.of(
-                                        "filename", p.getFileName().toString(),
-                                        "image_path", relative,
-                                        "size_kb", sizeKb
-                                ));
-                            } catch (Exception ignored) {
-                            }
-                        });
-            } catch (Exception ignored) {
-            }
-        }
-        Map<String, Object> result = new HashMap<>();
-        result.put("images", images);
-        result.put("max", max);
+        result.put("source", "none");
         return result;
     }
 
-    // ─── Story-level POST/DELETE ───────────────────────────────
-
     @PostMapping("/stories/{storyId}/ref-images")
     public Map<String, Object> addStoryRefImage(@PathVariable Long storyId, @RequestBody Map<String, String> body) {
-        Story story = storyRepository.findById(storyId)
+        storyRepository.findById(storyId)
                 .orElseThrow(() -> new BusinessException(404, "Story not found"));
-        byte[] imageData = mediaStorageService.decodeBase64Image(body.get("image"));
-        mediaStorageService.validateImageBytes(imageData, properties.getUpload().getMaxImageBytes());
+        uploadRefImage(storyRefPrefix(storyId), body);
 
-        Path refDir = mediaStorageService.getStoryDir(storyId).resolve("ref_images");
-        int max = properties.getRef().getMaxImagesPerLevel();
-        checkRefImageLimit(refDir, max);
-
-        String filename = mediaStorageService.generateUniqueFilename("ref", ".png");
-        mediaStorageService.savePng(imageData, refDir.resolve(filename));
-
-        Map<String, Object> result = listImagesInDir(refDir, max);
+        Map<String, Object> result = listImages(storyRefPrefix(storyId));
         result.put("source", "story");
         return result;
     }
@@ -218,73 +101,50 @@ public class ReferenceImageController {
     public Map<String, Object> deleteStoryRefImage(@PathVariable Long storyId, @PathVariable String filename) {
         storyRepository.findById(storyId)
                 .orElseThrow(() -> new BusinessException(404, "Story not found"));
-        mediaStorageService.validateImagePath(filename);
+        deleteRefImage(storyRefPrefix(storyId), filename);
 
-        Path refDir = mediaStorageService.getStoryDir(storyId).resolve("ref_images");
-        mediaStorageService.deleteFileIfExists(refDir.resolve(filename));
-
-        Map<String, Object> result = listImagesInDir(refDir, properties.getRef().getMaxImagesPerLevel());
+        Map<String, Object> result = listImages(storyRefPrefix(storyId));
         result.put("source", "story");
         return result;
     }
 
-    // ─── Chapter-level POST/DELETE ─────────────────────────────
-
+    @Transactional
     @PostMapping("/chapters/{chapterId}/ref-images")
     public Map<String, Object> addChapterRefImage(@PathVariable Long chapterId, @RequestBody Map<String, String> body) {
         Chapter chapter = chapterRepository.findById(chapterId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
-        byte[] imageData = mediaStorageService.decodeBase64Image(body.get("image"));
-        mediaStorageService.validateImageBytes(imageData, properties.getUpload().getMaxImageBytes());
+        uploadRefImage(chapterRefPrefix(chapter), body);
 
-        Path refDir = mediaStorageService.getChapterDir(chapterId).resolve("ref_images");
-        int max = properties.getRef().getMaxImagesPerLevel();
-        checkRefImageLimit(refDir, max);
-
-        String filename = mediaStorageService.generateUniqueFilename("ref", ".png");
-        mediaStorageService.savePng(imageData, refDir.resolve(filename));
-
-        Map<String, Object> result = listImagesInDir(refDir, max);
+        Map<String, Object> result = listImages(chapterRefPrefix(chapter));
         result.put("source", "chapter");
         return result;
     }
 
+    @Transactional
     @DeleteMapping("/chapters/{chapterId}/ref-images/{filename}")
     public Map<String, Object> deleteChapterRefImage(@PathVariable Long chapterId, @PathVariable String filename) {
-        chapterRepository.findById(chapterId)
+        Chapter chapter = chapterRepository.findById(chapterId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
-        mediaStorageService.validateImagePath(filename);
+        deleteRefImage(chapterRefPrefix(chapter), filename);
 
-        Path refDir = mediaStorageService.getChapterDir(chapterId).resolve("ref_images");
-        mediaStorageService.deleteFileIfExists(refDir.resolve(filename));
-
-        Map<String, Object> result = listImagesInDir(refDir, properties.getRef().getMaxImagesPerLevel());
+        Map<String, Object> result = listImages(chapterRefPrefix(chapter));
         result.put("source", "chapter");
         return result;
     }
-
-    // ─── Asset-group-level POST/DELETE ─────────────────────────
 
     @Transactional
     @PostMapping("/stories/{storyId}/asset-groups/{groupId}/ref-images")
     public Map<String, Object> addAssetGroupRefImage(@PathVariable Long storyId, @PathVariable Long groupId,
-                                                      @RequestBody Map<String, String> body) {
+                                                     @RequestBody Map<String, String> body) {
         StoryAssetGroup group = assetGroupRepository.findById(groupId)
                 .orElseThrow(() -> new BusinessException(404, "Asset group not found"));
         if (!group.getStory().getId().equals(storyId)) {
             throw new BusinessException(400, "Asset group does not belong to this story");
         }
-        byte[] imageData = mediaStorageService.decodeBase64Image(body.get("image"));
-        mediaStorageService.validateImageBytes(imageData, properties.getUpload().getMaxImageBytes());
+        String prefix = assetGroupRefPrefix(storyId, groupId);
+        uploadRefImage(prefix, body);
 
-        Path refDir = mediaStorageService.getAssetGroupDir(groupId).resolve("ref_images");
-        int max = properties.getRef().getMaxImagesPerLevel();
-        checkRefImageLimit(refDir, max);
-
-        String filename = mediaStorageService.generateUniqueFilename("ref", ".png");
-        mediaStorageService.savePng(imageData, refDir.resolve(filename));
-
-        Map<String, Object> result = listImagesInDir(refDir, max);
+        Map<String, Object> result = listImages(prefix);
         result.put("source", "asset_group");
         return result;
     }
@@ -292,34 +152,101 @@ public class ReferenceImageController {
     @Transactional
     @DeleteMapping("/stories/{storyId}/asset-groups/{groupId}/ref-images/{filename}")
     public Map<String, Object> deleteAssetGroupRefImage(@PathVariable Long storyId, @PathVariable Long groupId,
-                                                         @PathVariable String filename) {
+                                                        @PathVariable String filename) {
         StoryAssetGroup group = assetGroupRepository.findById(groupId)
                 .orElseThrow(() -> new BusinessException(404, "Asset group not found"));
         if (!group.getStory().getId().equals(storyId)) {
             throw new BusinessException(400, "Asset group does not belong to this story");
         }
-        mediaStorageService.validateImagePath(filename);
+        String prefix = assetGroupRefPrefix(storyId, groupId);
+        deleteRefImage(prefix, filename);
 
-        Path refDir = mediaStorageService.getAssetGroupDir(groupId).resolve("ref_images");
-        mediaStorageService.deleteFileIfExists(refDir.resolve(filename));
-
-        Map<String, Object> result = listImagesInDir(refDir, properties.getRef().getMaxImagesPerLevel());
+        Map<String, Object> result = listImages(prefix);
         result.put("source", "asset_group");
         return result;
     }
 
-    // ─── Helpers ───────────────────────────────────────────────
+    private Map<String, Object> listImages(String prefix) {
+        int max = properties.getRef().getMaxImagesPerLevel();
+        List<Map<String, Object>> images = objectStorageService.list(properties.getMinio().getBucket(), prefix, max).stream()
+                .filter(o -> isImageObject(o.objectKey()))
+                .sorted(Comparator.comparing(StoredObject::objectKey))
+                .map(o -> Map.<String, Object>of(
+                        "filename", Path.of(o.objectKey()).getFileName().toString(),
+                        "image_path", o.objectKey(),
+                        "size_kb", o.sizeBytes() / 1024
+                ))
+                .toList();
+        Map<String, Object> result = new HashMap<>();
+        result.put("images", images);
+        result.put("max", max);
+        return result;
+    }
 
-    private void checkRefImageLimit(Path refDir, int max) {
-        if (!Files.exists(refDir)) return;
-        try {
-            long count = Files.list(refDir).filter(this::isImageFile).count();
-            if (count >= max) {
-                throw new BusinessException(400, "已达到最大垫图数量限制 (" + max + " 张)");
-            }
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception ignored) {
+    private Map<String, Object> legacyImage(String imagePath) {
+        Map<String, Object> result = new HashMap<>();
+        result.put("images", List.of(Map.of(
+                "filename", Path.of(imagePath).getFileName().toString(),
+                "image_path", imagePath,
+                "size_kb", 0
+        )));
+        result.put("max", properties.getRef().getMaxImagesPerLevel());
+        return result;
+    }
+
+    private void uploadRefImage(String prefix, Map<String, String> body) {
+        int max = properties.getRef().getMaxImagesPerLevel();
+        if (objectStorageService.list(properties.getMinio().getBucket(), prefix, max).stream()
+                .filter(o -> isImageObject(o.objectKey()))
+                .count() >= max) {
+            throw new BusinessException(400, "已达到最大垫图数量限制 (" + max + " 张)");
         }
+
+        byte[] imageData = mediaStorageService.decodeBase64Image(body.get("image"));
+        mediaStorageService.validateImageBytes(imageData, properties.getUpload().getMaxImageBytes());
+        String filename = mediaStorageService.generateUniqueFilename("ref", ".png");
+        Path temp = null;
+        try {
+            temp = Files.createTempFile("artverse-ref-upload-", ".png");
+            mediaStorageService.savePng(imageData, temp);
+            objectStorageService.putPng(prefix + filename, temp, "image/png");
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to upload ref image: " + e.getMessage(), e);
+        } finally {
+            if (temp != null) {
+                try {
+                    Files.deleteIfExists(temp);
+                } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
+    private void deleteRefImage(String prefix, String filename) {
+        mediaStorageService.validateImagePath(filename);
+        String safeFilename = Path.of(filename).getFileName().toString();
+        objectStorageService.deleteBestEffort(properties.getMinio().getBucket(), prefix + safeFilename);
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean imagesEmpty(Map<String, Object> result) {
+        return ((List<Map<String, Object>>) result.get("images")).isEmpty();
+    }
+
+    private String storyRefPrefix(Long storyId) {
+        return "stories/" + storyId + "/ref_images/";
+    }
+
+    private String chapterRefPrefix(Chapter chapter) {
+        return "stories/" + chapter.getStory().getId() + "/chapters/" + chapter.getId() + "/ref_images/";
+    }
+
+    private String assetGroupRefPrefix(Long storyId, Long groupId) {
+        return "stories/" + storyId + "/asset_groups/" + groupId + "/ref_images/";
+    }
+
+    private boolean isImageObject(String objectKey) {
+        String name = objectKey.toLowerCase();
+        return name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp");
     }
 }

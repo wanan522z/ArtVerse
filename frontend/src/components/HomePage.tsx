@@ -23,6 +23,7 @@ import {
   importStoryPackage,
   uploadStoryCover,
   mangaThumbUrl,
+  refImageUrl,
   saveStoryCharacters,
   addStoryRefImage,
   deleteStoryRefImage,
@@ -808,7 +809,7 @@ export default function HomePage({ onSelectStory }: Props) {
                             {activeAssetGroup.ref_images.map((img) => (
                               <div key={img.filename} className="relative aspect-square rounded-lg overflow-hidden border border-gray-700 bg-gray-950">
                                 <img
-                                  src={mangaThumbUrl(img.image_path, 480, img.filename)!}
+                                  src={refImageUrl(img.image_path)}
                                   alt={img.filename}
                                   className="w-full h-full object-cover"
                                   loading="lazy"
@@ -965,7 +966,7 @@ export default function HomePage({ onSelectStory }: Props) {
                       className="relative group aspect-square rounded-lg overflow-hidden border border-gray-700 bg-gray-950"
                     >
                       <img
-                        src={mangaThumbUrl(img.image_path, 480, img.filename)!}
+                        src={refImageUrl(img.image_path)}
                         alt={img.filename}
                         className="w-full h-full object-cover"
                         loading="lazy"
