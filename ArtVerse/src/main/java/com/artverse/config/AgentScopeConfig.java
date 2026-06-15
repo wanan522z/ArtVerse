@@ -26,7 +26,7 @@ public class AgentScopeConfig {
             log.info("Loading .env from: {}", envFile);
             return Dotenv.configure().directory(envFile.getParent().toString()).load();
         }
-        log.warn(".env file not found at: {}", envFile);
+        log.debug(".env file not found at: {}", envFile);
         return Dotenv.configure().ignoreIfMissing().load();
     }
 
@@ -108,7 +108,7 @@ public class AgentScopeConfig {
             }
         }
         if (apiKey == null || apiKey.isBlank()) {
-            log.warn("DeepSeek API key is not configured. Set DEEPSEEK_API_KEY in .env or application.yml. AI features will fail until a key is provided.");
+            log.debug("DeepSeek API key not configured at system level; per-user keys will be used.");
         }
         log.info("DeepSeek model configured with key: {}", maskKey(apiKey));
         return OpenAIChatModel.builder()

@@ -9,7 +9,6 @@ import io.agentscope.core.model.Model;
 import io.agentscope.core.model.OpenAIChatModel;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
-import io.github.cdimascio.dotenv.Dotenv;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
@@ -33,20 +32,17 @@ public class AgentScopeHarnessAgentGateway implements HarnessAgentGateway {
     private final Path workspace;
     private final CompactionConfig compactionConfig;
     private final ArtVerseProperties properties;
-    private final Dotenv dotenv;
     private final Map<String, HarnessAgent> agentCache = new ConcurrentHashMap<>();
 
     public AgentScopeHarnessAgentGateway(
             Model model,
             @Qualifier("agentScopeWorkspace") Path workspace,
             CompactionConfig compactionConfig,
-            ArtVerseProperties properties,
-            Dotenv dotenv) {
+            ArtVerseProperties properties) {
         this.model = model;
         this.workspace = workspace;
         this.compactionConfig = compactionConfig;
         this.properties = properties;
-        this.dotenv = dotenv;
     }
 
     @Override

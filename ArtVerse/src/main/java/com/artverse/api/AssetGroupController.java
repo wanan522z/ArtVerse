@@ -65,24 +65,7 @@ public class AssetGroupController {
     @Transactional(readOnly = true)
     @GetMapping("/chapters/{chapterId}/asset-group")
     public Map<String, Object> getChapterAssetGroup(@PathVariable Long chapterId) {
-        Chapter chapter = chapterRepository.findById(chapterId)
-                .orElseThrow(() -> new com.artverse.common.BusinessException(404, "Chapter not found"));
-
-        List<Map<String, Object>> groups = chapter.getStory().getAssetGroups().stream()
-                .map(g -> {
-                    Map<String, Object> gm = new HashMap<>();
-                    gm.put("id", g.getId());
-                    gm.put("name", g.getName());
-                    gm.put("is_default", false);
-                    gm.put("has_character_profiles", g.getCharacterProfiles() != null && !g.getCharacterProfiles().isBlank());
-                    return gm;
-                }).toList();
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("groups", groups);
-        result.put("max", 4);
-        result.put("selected_group_id", chapter.getAssetGroup() != null ? chapter.getAssetGroup().getId() : null);
-        return result;
+        return assetGroupService.getChapterAssetGroupData(chapterId);
     }
 
     @Transactional
@@ -90,7 +73,7 @@ public class AssetGroupController {
     public Map<String, Object> setChapterAssetGroup(@PathVariable Long chapterId, @RequestBody Map<String, Object> body) {
         Long groupId = body.get("group_id") != null ? ((Number) body.get("group_id")).longValue() : null;
         assetGroupService.setChapterAssetGroup(chapterId, groupId);
-        return getChapterAssetGroup(chapterId);
+        return assetGroupService.getChapterAssetGroupData(chapterId);
     }
 
     private Map<String, Object> toGroupMap(StoryAssetGroup group) {

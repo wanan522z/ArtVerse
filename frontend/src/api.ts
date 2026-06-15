@@ -791,22 +791,28 @@ export async function deleteChapterRefImage(chapterId: number, filename: string)
 }
 
 
-export type MangaStyle = 'japanese' | 'korean' | 'american' | 'european' | 'chinese_ink' | 'semi_realistic';
+export type MangaStyle = 'japanese_manga' | 'korean_webtoon' | 'american_comic' | 'ligne_claire' | 'chinese_ink' | 'semi_realistic' | 'realistic' | 'oil_painting' | 'flat_design' | 'pixel_art' | 'watercolor' | 'cyberpunk';
 
 export const MANGA_STYLE_LABELS: Record<MangaStyle, string> = {
-  japanese: '鏃ュ紡婕敾',
-  korean: '闊╁紡鏉℃极',
-  american: '缇庡紡婕敾',
-  european: '娆у紡娓呯嚎',
-  chinese_ink: '姘村ⅷ鍥介',
-  semi_realistic: 'Semi-realistic',
+  japanese_manga: '日式漫画',
+  korean_webtoon: '韩式条漫',
+  american_comic: '美式漫画',
+  ligne_claire: '欧式清线',
+  chinese_ink: '水墨国风',
+  semi_realistic: '半写实',
+  realistic: '全写实',
+  oil_painting: '厚涂油画',
+  flat_design: '扁平极简',
+  pixel_art: '像素风',
+  watercolor: '水彩淡雅',
+  cyberpunk: '赛博朋克',
 };
 
 export async function getMangaStyle(storyId: number): Promise<MangaStyle> {
   const res = await authFetch(`${BASE}/api/stories/${storyId}/manga-style`);
   if (!res.ok) throw new Error(await res.text());
   const data = await res.json();
-  return data.manga_style || 'japanese';
+  return data.manga_style || 'japanese_manga';
 }
 
 export async function setMangaStyle(storyId: number, style: MangaStyle): Promise<void> {
@@ -822,9 +828,9 @@ export async function setMangaStyle(storyId: number, style: MangaStyle): Promise
 export type ColorMode = 'bw' | 'grayscale' | 'color' | 'duotone';
 
 export const COLOR_MODE_LABELS: Record<ColorMode, string> = {
-  bw: '榛戠櫧',
-  grayscale: '鐏板害',
-  color: '褰╄壊',
+  bw: '黑白',
+  grayscale: '灰度',
+  color: '彩色',
   duotone: 'Duotone',
 };
 

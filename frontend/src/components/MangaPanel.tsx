@@ -1,17 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronUp, ChevronDown, Download, ImageIcon, Loader2, Sparkles, Pencil, RefreshCw, Check, X, ImagePlus, Trash2, Square } from 'lucide-react';
+import { ChevronUp, ChevronDown, Download, ImageIcon, Loader2, Sparkles, Pencil, RefreshCw, Check, X, Square, Users, ImagePlus, Trash2 } from 'lucide-react';
 import {
   generateMangaStream,
   generateScenes,
   getScenes,
   updateScenes,
   regenerateImage,
-  getCharacters,
-  saveCharacters,
-  resetChapterCharacters,
-  getChapterRefImages,
-  addChapterRefImage,
-  deleteChapterRefImage,
   getChapterAssetGroup,
   setChapterAssetGroup,
   getColorMode,
@@ -24,16 +18,17 @@ import {
   MANGA_STYLE_LABELS,
   COLOR_MODE_LABELS,
   mangaImageUrl,
-  refImageUrl,
+  
   mangaThumbUrl,
   type Chapter,
   type MangaProgress,
   type ColorMode,
   type MangaStyle,
-  type RefSource,
-  type RefImage,
-  type CharacterSource,
   type AssetGroup,
+  listCharRefImages,
+  updateCharacterProfile,
+  addCharRefImage,
+  deleteCharRefImage,
 } from '../api';
 import { genStore } from '../genStore';
 
@@ -64,28 +59,26 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
   const [editText, setEditText] = useState('');
   const [savingScenes, setSavingScenes] = useState(false);
   const [regenIdx, setRegenIdx] = useState<number>(-1);
-  const [charText, setCharText] = useState('');
-  const [charSource, setCharSource] = useState<CharacterSource>('none');
   const [assetGroups, setAssetGroups] = useState<AssetGroup[]>([]);
   const [selectedAssetGroupId, setSelectedAssetGroupId] = useState<number | null>(null);
+  const [selectedGroupCharacters, setSelectedGroupCharacters] = useState<AssetGroupCharacter[]>([]);
+  const [charThumbnails, setCharThumbnails] = useState<Record<number, string>>({});
+  const [charCardsExpanded, setCharCardsExpanded] = useState(true);
+  const [editingCharacter, setEditingCharacter] = useState<AssetGroupCharacter | null>(null);
+  const [editCharName, setEditCharName] = useState('');
+  const [editCharDesc, setEditCharDesc] = useState('');
+  const [editCharRefs, setEditCharRefs] = useState<CharRefImage[]>([]);
+  const [editCharRefUploading, setEditCharRefUploading] = useState(false);
+  const [editCharSaving, setEditCharSaving] = useState(false);
+  const editCharFileRef = useRef<HTMLInputElement>(null);
   const [assetGroupSaving, setAssetGroupSaving] = useState(false);
-  const [charEditing, setCharEditing] = useState(false);
-  const [charDraft, setCharDraft] = useState('');
-  const [charSaving, setCharSaving] = useState(false);
-  const [charExpanded, setCharExpanded] = useState(false);
-  const [refImages, setRefImages] = useState<RefImage[]>([]);
-  const [refSource, setRefSource] = useState<RefSource>('none');
-  const [refMax, setRefMax] = useState(4);
-  const [refUploading, setRefUploading] = useState(false);
-  const [refModalOpen, setRefModalOpen] = useState(false);
   const [colorMode, setColorModeState] = useState<ColorMode>('bw');
-  const [mangaStyle, setMangaStyleState] = useState<MangaStyle>('japanese');
+  const [mangaStyle, setMangaStyleState] = useState<MangaStyle>('japanese_manga');
   const [showMangaStyleMenu, setShowMangaStyleMenu] = useState(false);
   const mangaStyleMenuRef = useRef<HTMLDivElement>(null);
   const [imageCount, setImageCountState] = useState(DEFAULT_IMAGE_COUNT);
   const [showColorMenu, setShowColorMenu] = useState(false);
   const colorMenuRef = useRef<HTMLDivElement>(null);
-  const refFileRef = useRef<HTMLInputElement>(null);
   const lightboxRef = useRef<HTMLDivElement>(null);
   const chapterLoadRequestRef = useRef(0);
   const sceneAbortRef = useRef<AbortController | null>(null);
@@ -115,16 +108,11 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
     setExpandedScenes(new Set());
     setEditingIdx(-1);
     setRegenIdx(-1);
-    setCharText('');
-    setCharSource('none');
     setAssetGroups([]);
     setSelectedAssetGroupId(null);
+    setSelectedGroupCharacters([]);
+    setCharThumbnails({});
     setAssetGroupSaving(false);
-    setCharEditing(false);
-    setCharExpanded(false);
-    setRefImages([]);
-    setRefSource('none');
-    setRefModalOpen(false);
     setColorModeState('bw');
     setImageCountState(DEFAULT_IMAGE_COUNT);
     setShowColorMenu(false);
@@ -134,13 +122,23 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
         if (chapterLoadRequestRef.current !== requestId) return;
         setAssetGroups(r.groups);
         setSelectedAssetGroupId(r.selected_group_id ?? null);
-      }).catch(() => {});
-      getChapterRefImages(chapter.id).then((r) => {
-        if (chapterLoadRequestRef.current !== requestId) return;
-        setRefImages(r.images);
-        setRefSource(r.source ?? (r.images.length ? 'chapter' : 'none'));
-        setRefMax(r.max);
-      }).catch(() => {});
+        const selGroup = r.groups.find((g: any) => g.id === r.selected_group_id);
+        const chars = selGroup?.characters || [];
+        setSelectedGroupCharacters(chars);
+        if (chars.length > 0 && chapter) {
+          const thumbs: Record<number, string> = {};
+          Promise.all(chars.map(async (ch: any) => {
+            try {
+              const refs = await listCharRefImages(chapter.story_id, ch.id);
+              if (refs.length > 0) thumbs[ch.id] = mangaThumbUrl(refs[0].object_key, 200) || '';
+            } catch (_e) {}
+          })).then(() => setCharThumbnails(thumbs));
+        }
+      }).catch((err: any) => {
+        console.error('Failed to load asset group:', err);
+        setErrorMsg('加载设定组失败: ' + (err.message || '未知错误'));
+      });
+
       getColorMode(chapter.id).then((m) => {
         if (chapterLoadRequestRef.current === requestId) setColorModeState(m);
       }).catch(() => {});
@@ -164,11 +162,6 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
             setPhase('editing-scenes');
           }
         }
-      }).catch(() => {});
-      getCharacters(chapter.id).then((r) => {
-        if (chapterLoadRequestRef.current !== requestId) return;
-        setCharText(r.characters || '');
-        setCharSource(r.source);
       }).catch(() => {});
     }
   }, [chapter?.id]);
@@ -203,13 +196,104 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
   const lightboxImg = lightboxIdx >= 0 ? displayImages[lightboxIdx] : null;
   const hasSourceContent = !!chapter && ((chapter.messages?.length ?? 0) > 0 || !!chapter.novel_content?.trim());
 
+  const openCharEditor = async (ch: AssetGroupCharacter) => {
+    setEditingCharacter(ch);
+    setEditCharName(ch.name);
+    setEditCharDesc(ch.description || '');
+    setEditCharRefs([]);
+    if (chapter) {
+      try {
+        const refs = await listCharRefImages(chapter.story_id, ch.id);
+        setEditCharRefs(refs);
+      } catch {}
+    }
+  };
+
+  const handleEditCharSave = async () => {
+    if (!editingCharacter || !chapter) return;
+    setEditCharSaving(true);
+    try {
+      await updateCharacterProfile(chapter.story_id, editingCharacter.id, editCharName, editCharDesc);
+      // Refresh characters and thumbnails
+      setSelectedGroupCharacters(prev =>
+        prev.map(c => c.id === editingCharacter.id ? { ...c, name: editCharName, description: editCharDesc } : c)
+      );
+      setEditingCharacter(null);
+    } catch (err: any) {
+      setErrorMsg(err.message || '保存失败');
+    } finally {
+      setEditCharSaving(false);
+    }
+  };
+
+  const handleEditCharRefUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingCharacter || !chapter) return;
+    setEditCharRefUploading(true);
+    try {
+      const reader = new FileReader();
+      const b64 = await new Promise<string>((resolve) => {
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.readAsDataURL(file);
+      });
+      const ref = await addCharRefImage(chapter.story_id, editingCharacter.id, b64);
+      setEditCharRefs(prev => [...prev, ref]);
+      // Update thumbnail
+      setCharThumbnails(prev => ({ ...prev, [editingCharacter.id]: mangaThumbUrl(ref.object_key, 200) || '' }));
+    } catch (err: any) {
+      setErrorMsg(err.message || '上传失败');
+    } finally {
+      setEditCharRefUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleEditCharRefDelete = async (filename: string) => {
+    if (!editingCharacter || !chapter) return;
+    try {
+      await deleteCharRefImage(chapter.story_id, editingCharacter.id, filename);
+      setEditCharRefs(prev => {
+        const remaining = prev.filter(r => r.filename !== filename);
+        if (remaining.length > 0) {
+          setCharThumbnails(prev2 => ({ ...prev2, [editingCharacter.id]: mangaThumbUrl(remaining[0].object_key, 200) || '' }));
+        } else {
+          setCharThumbnails(prev2 => {
+            const next = { ...prev2 };
+            delete next[editingCharacter.id];
+            return next;
+          });
+        }
+        return remaining;
+      });
+    } catch (err: any) {
+      setErrorMsg(err.message || '删除失败');
+    }
+  };
+
   const refreshChapterAssetFallback = async (chapterId: number) => {
-    const [chars, refs] = await Promise.all([getCharacters(chapterId), getChapterRefImages(chapterId)]);
-    setCharText(chars.characters || '');
-    setCharSource(chars.source);
-    setRefImages(refs.images);
-    setRefSource(refs.source ?? (refs.images.length ? 'chapter' : 'none'));
-    setRefMax(refs.max);
+    try {
+      const r = await getChapterAssetGroup(chapterId);
+      setAssetGroups(r.groups);
+      setSelectedAssetGroupId(r.selected_group_id ?? null);
+      // Load characters for selected group
+      const selGroup = r.groups.find((g: any) => g.id === r.selected_group_id);
+      const chars = selGroup?.characters || [];
+      setSelectedGroupCharacters(chars);
+      // Load thumbnails for characters
+      if (chars.length > 0 && chapter) {
+        const thumbs: Record<number, string> = {};
+        const storyId = chapter.story_id;
+        await Promise.all(chars.map(async (c: AssetGroupCharacter) => {
+          try {
+            const refs = await listCharRefImages(storyId, c.id);
+            if (refs.length > 0) thumbs[c.id] = mangaThumbUrl(refs[0].object_key, 200) || '';
+          } catch (_e) {}
+        }));
+        setCharThumbnails(thumbs);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    }
   };
 
   const handleSelectAssetGroup = async (value: string) => {
@@ -222,7 +306,23 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
       const result = await setChapterAssetGroup(chapter.id, nextGroupId);
       setAssetGroups(result.groups);
       setSelectedAssetGroupId(result.selected_group_id ?? null);
-      await refreshChapterAssetFallback(chapter.id);
+      // Immediately extract characters from result
+      const selGroup = result.groups.find((g: any) => g.id === result.selected_group_id);
+      const chars = selGroup?.characters || [];
+      setSelectedGroupCharacters(chars);
+      // Load thumbnails right away
+      if (chars.length > 0) {
+        const thumbs: Record<number, string> = {};
+        const storyId = chapter.story_id;
+        Promise.all(chars.map(async (c: AssetGroupCharacter) => {
+          try {
+            const refs = await listCharRefImages(storyId, c.id);
+            if (refs.length > 0) thumbs[c.id] = mangaThumbUrl(refs[0].object_key, 200) || '';
+          } catch (_e) {}
+        })).then(() => setCharThumbnails(thumbs));
+      }
+      // Still refresh in background for consistency
+      refreshChapterAssetFallback(chapter.id).catch(() => {});
     } catch (err: any) {
       setSelectedAssetGroupId(previous);
       setErrorMsg(`切换设定组失败: ${err.message}`);
@@ -545,59 +645,6 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
               ))}
             </select>
           )}
-          {/* 垫图 (Reference Images, 多图) */}
-          <div className="flex items-center gap-1">
-            <input
-              ref={refFileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file || !chapter) return;
-                setRefUploading(true);
-                try {
-                  const reader = new FileReader();
-                  const b64 = await new Promise<string>((resolve) => {
-                    reader.onload = () => resolve((reader.result as string).split(',')[1]);
-                    reader.readAsDataURL(file);
-                  });
-                  const r = await addChapterRefImage(chapter.id, b64);
-                  setRefImages(r.images);
-                  setRefSource(r.source ?? 'chapter');
-                  setRefMax(r.max);
-                } catch (err: any) {
-                  setErrorMsg(`上传垫图失败: ${err.message}`);
-                } finally {
-                  setRefUploading(false);
-                  e.target.value = '';
-                }
-              }}
-            />
-            <button
-              onClick={() => setRefModalOpen(true)}
-              disabled={!chapter}
-              className={`flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors
-                ${refImages.length > 0
-                  ? 'bg-emerald-900/50 hover:bg-emerald-800 text-emerald-300 border border-emerald-700'
-                  : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
-                } disabled:opacity-40`}
-              title={
-                refImages.length > 0
-                  ? refSource === 'story' || refSource === 'asset_group'
-                    ? `全局垫图 ${refImages.length} 张· 点击查看/管理`
-                    : `已设置 ${refImages.length} 张垫图· 点击查看/管理`
-                  : '点击上传垫图参考'
-              }
-            >
-              <ImagePlus size={13} />
-              {refImages.length > 0
-                ? refSource === 'story' || refSource === 'asset_group'
-                  ? `全局垫图 ${refImages.length}`
-                  : `已垫图 ${refImages.length}`
-                : '垫图'}
-            </button>
-          </div>
           {/* Image count selector */}
           {!generating && (phase === 'idle' || phase === 'editing-scenes') && (
             <select
@@ -666,7 +713,7 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
                   <ChevronDown size={11} className={`transition-transform ${showMangaStyleMenu ? 'rotate-180' : ''}`} />
                 </button>
                 {showMangaStyleMenu && (
-                  <div className="absolute right-0 top-full mt-1 w-36 rounded-lg border border-gray-700 bg-gray-900 shadow-xl z-50 overflow-hidden">
+                  <div className="absolute right-0 top-full mt-1 w-40 rounded-lg border border-gray-700 bg-gray-900 shadow-xl z-50 overflow-hidden">
                     {(Object.keys(MANGA_STYLE_LABELS) as MangaStyle[]).map((style) => (
                       <button
                         key={style}
@@ -847,96 +894,60 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
 
       {/* Main content area */}
       <div className="flex-1 overflow-y-auto px-3 md:px-5 py-4">
-        {/* Character profiles card */}
+        {/* Character cards from selected asset group */}
         {(phase === 'idle' || phase === 'editing-scenes') && (
           <div className="mb-4 rounded-lg border border-gray-800 bg-gray-900/60 overflow-hidden">
             <button
-              onClick={() => setCharExpanded((v) => !v)}
+              onClick={() => setCharCardsExpanded((v) => !v)}
               className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wide hover:bg-gray-800/40 transition-colors"
             >
               <span className="flex items-center gap-1.5">
                 🎭 角色外貌卡
-                {charText && charSource === 'story' && (
-                  <span className="text-[10px] font-normal normal-case px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-400 border border-blue-800/50">继承自首页</span>
+                {selectedGroupCharacters.length > 0 && (
+                  <span className="text-[10px] font-normal normal-case px-1.5 py-0.5 rounded bg-violet-900/50 text-violet-300 border border-violet-800/50">
+                    {selectedGroupCharacters.length} 个角色
+                  </span>
                 )}
-                {charText && charSource === 'asset_group' && (
-                  <span className="text-[10px] font-normal normal-case px-1.5 py-0.5 rounded bg-violet-900/50 text-violet-300 border border-violet-800/50">来自设定组</span>
-                )}
-                {charText && charSource === 'chapter' && (
-                  <span className="text-[10px] font-normal normal-case px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-400 border border-emerald-800/50">本话自定义</span>
-                )}
-                {!charText && '（未设定）'}
+                {selectedAssetGroupId && selectedGroupCharacters.length === 0 && '（该设定组暂无角色卡）'}
+                {!selectedAssetGroupId && '（未选择设定组）'}
               </span>
-              {charExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {charCardsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
-            {charExpanded && (
+            {charCardsExpanded && (
               <div className="px-3 pb-3">
-                {charEditing ? (
-                  <>
-                    <textarea
-                      value={charDraft}
-                      onChange={(e) => setCharDraft(e.target.value)}
-                      className="w-full bg-gray-800 text-xs text-gray-200 rounded p-2 resize-none outline-none border border-gray-700 focus:border-violet-500 leading-relaxed"
-                      rows={12}
-                      placeholder={`角色名：塞蕾娜\n性别：女\n发色与发型：银灰色长发...\n（粘贴完整角色卡）`}
-                      autoFocus
-                    />
-                    <div className="flex justify-end gap-2 mt-2">
-                      <button
-                        onClick={() => setCharEditing(false)}
-                        className="px-2 py-1 text-xs rounded text-gray-500 hover:text-gray-300 hover:bg-gray-700 transition-colors"
-                      >取消</button>
-                      <button
-                        disabled={charSaving}
-                        onClick={async () => {
-                          if (!chapter) return;
-                          setCharSaving(true);
-                          try {
-                            await saveCharacters(chapter.id, charDraft);
-                            setCharText(charDraft);
-                            setCharSource('chapter');
-                            setCharEditing(false);
-                          } catch (err: any) {
-                            setErrorMsg(err.message);
-                          } finally {
-                            setCharSaving(false);
-                          }
-                        }}
-                        className="px-3 py-1 text-xs rounded bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-40 transition-colors"
-                      >{charSaving ? '保存中…' : '保存（本话覆盖）'}</button>
-                    </div>
-                  </>
-                ) : charText ? (
-                  <>
-                    <pre className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap max-h-48 overflow-y-auto">{charText}</pre>
-                    <div className="mt-2 flex items-center gap-2 flex-wrap">
-                      <button
-                        onClick={() => { setCharDraft(charText); setCharEditing(true); }}
-                        className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"
-                      ><Pencil size={11} /> 编辑</button>
-                      {charSource === 'chapter' && (
-                        <button
-                          onClick={async () => {
-                            if (!chapter) return;
-                            try {
-                              await resetChapterCharacters(chapter.id);
-                              const r = await getCharacters(chapter.id);
-                              setCharText(r.characters || '');
-                              setCharSource(r.source);
-                            } catch (err: any) {
-                              setErrorMsg(err.message);
-                            }
-                          }}
-                          className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                        ><RefreshCw size={11} /> 恢复全局设定</button>
-                      )}
-                    </div>
-                  </>
+                {selectedGroupCharacters.length > 0 ? (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                    {selectedGroupCharacters.map((ch) => {
+                      const thumb = charThumbnails[ch.id];
+                      return (
+                        <div
+                          key={ch.id}
+                          className="rounded-lg border border-gray-700 bg-gray-950/60 overflow-hidden cursor-pointer hover:border-violet-500 transition-colors group"
+                          onClick={() => openCharEditor(ch)}
+                        >
+                          <div className="aspect-square bg-gray-800 flex items-center justify-center">
+                            {thumb ? (
+                              <img
+                                src={thumb}
+                                alt={ch.name}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <Users size={24} className="text-gray-600" />
+                            )}
+                          </div>
+                          <div className="px-2 py-1.5 text-center">
+                            <span className="text-xs text-gray-300 truncate block">{ch.name}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : selectedAssetGroupId ? (
+                  <p className="text-xs text-gray-600 py-6 text-center">该设定组暂无角色卡，请在小说卡片处添加</p>
                 ) : (
-                  <button
-                    onClick={() => { setCharDraft(''); setCharEditing(true); }}
-                    className="text-xs text-violet-400 hover:text-violet-300 transition-colors"
-                  >+ 添加角色卡（粘贴 AI 生成的角色外貌描述）</button>
+                  <p className="text-xs text-gray-600 py-6 text-center">请在上方选择一个设定组</p>
                 )}
               </div>
             )}
@@ -1200,121 +1211,99 @@ export default function MangaPanel({ chapter, onChapterRefresh }: Props) {
         </div>
       )}
 
-      {/* Reference images management modal */}
-      {refModalOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setRefModalOpen(false)}
-        >
-          <div
-            className="w-full max-w-2xl bg-gray-900 border border-gray-800 rounded-xl shadow-2xl max-h-[85vh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800">
-              <div className="flex items-center gap-2">
-                <ImagePlus size={16} className="text-emerald-400" />
-                <h3 className="text-sm font-semibold text-gray-200">垫图管理</h3>
-                <span className="text-xs text-gray-500">
-                  {refImages.length}/{refMax} 张
-                  {(refSource === 'story' || refSource === 'asset_group') && refImages.length > 0 && (
-                    <span className="ml-2 text-blue-400">· 继承自全局</span>
-                  )}
-                </span>
-              </div>
-              <button
-                onClick={() => setRefModalOpen(false)}
-                className="p-1 text-gray-500 hover:text-white rounded transition-colors"
-              >
+      {/* Character edit modal */}
+      {editingCharacter !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4" onClick={() => setEditingCharacter(null)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-lg h-[580px] shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 flex-shrink-0">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Users size={16} className="text-violet-400" />
+                编辑角色卡
+              </h3>
+              <button onClick={() => setEditingCharacter(null)} className="p-1 text-gray-500 hover:text-gray-300 transition-colors">
                 <X size={16} />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-5">
-              <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-                上传角色参考图，AI 生成漫画时会保持人物外貌一致性。
-                {(refSource === 'story' || refSource === 'asset_group') && refImages.length > 0 && (
-                  <> 当前显示首页设置的全局垫图；上传新图将创建本话专属垫图覆盖全局。</>
-                )}
-              </p>
-              {refImages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-gray-600 text-sm gap-2 border border-dashed border-gray-800 rounded-lg">
-                  <ImagePlus size={32} className="opacity-50" />
-                  <span>还没有垫图，点击下方按钮上传</span>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1.5">角色名称</label>
+                <input
+                  value={editCharName}
+                  onChange={(e) => setEditCharName(e.target.value)}
+                  className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  placeholder="输入角色名称"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-500 mb-1.5">角色描述</label>
+                <textarea
+                  value={editCharDesc}
+                  onChange={(e) => setEditCharDesc(e.target.value)}
+                  rows={4}
+                  className="w-full bg-gray-800 text-sm text-gray-200 rounded-lg p-3 resize-none outline-none border border-gray-700 focus:border-violet-500"
+                  placeholder="描述角色的性格、外貌、背景等..."
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-gray-500">人物参考图 ({editCharRefs.length}/5)</label>
+                  <button
+                    onClick={() => editCharFileRef.current?.click()}
+                    disabled={editCharRefUploading || editCharRefs.length >= 5}
+                    className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-violet-600 hover:bg-violet-500 text-white disabled:opacity-40 transition-colors"
+                  >
+                    {editCharRefUploading ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
+                    上传图片
+                  </button>
                 </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {refImages.map((img) => (
-                    <div
-                      key={img.filename}
-                      className="relative group aspect-square rounded-lg overflow-hidden border border-gray-800 bg-gray-950"
-                    >
-                      <img
-                        src={refImageUrl(img.image_path)}
-                        alt={img.filename}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-end justify-between p-2 pointer-events-none">
-                        <span className="text-[10px] text-white/80 bg-black/60 px-1.5 py-0.5 rounded">
-                          {img.size_kb} KB
-                        </span>
-                      </div>
-                      {refSource === 'chapter' && chapter && (
+                {editCharRefs.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-gray-600 text-sm gap-2 border border-dashed border-gray-800 rounded-lg">
+                    <ImagePlus size={28} className="opacity-50" />
+                    <span>暂无参考图</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-5 gap-2">
+                    {editCharRefs.map((ref) => (
+                      <div key={ref.filename} className="relative group aspect-square rounded-lg overflow-hidden border border-gray-700 bg-gray-950">
+                        <img
+                          src={mangaThumbUrl(ref.object_key, 200) || ""}
+                          alt={ref.filename}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
                         <button
-                          onClick={async () => {
-                            try {
-                              const r = await deleteChapterRefImage(chapter.id, img.filename);
-                              setRefImages(r.images);
-                              setRefSource(r.source ?? (r.images.length ? 'chapter' : 'none'));
-                              setRefMax(r.max);
-                              if (r.images.length === 0) {
-                                // After deleting last chapter ref, reload to pick up story fallback
-                                const next = await getChapterRefImages(chapter.id);
-                                setRefImages(next.images);
-                                setRefSource(next.source ?? (next.images.length ? 'chapter' : 'none'));
-                              }
-                            } catch (err: any) {
-                              setErrorMsg(`删除垫图失败: ${err.message}`);
-                            }
-                          }}
-                          className="absolute top-1.5 right-1.5 p-1 rounded-md bg-red-600 hover:bg-red-500 text-white shadow-lg transition-colors"
+                          onClick={() => handleEditCharRefDelete(ref.filename)}
+                          className="absolute top-1 right-1 p-1 rounded-md bg-red-600 hover:bg-red-500 text-white shadow-lg transition-colors opacity-0 group-hover:opacity-100"
                           title="删除"
                         >
-                          <Trash2 size={12} />
+                          <Trash2 size={10} />
                         </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="px-5 py-3 border-t border-gray-800 flex items-center justify-between gap-2">
-              <span className="text-xs text-gray-500">
-                {refSource === 'chapter'
-                  ? '本话自定义垫图（覆盖全局）'
-                  : refSource === 'story' || refSource === 'asset_group'
-                    ? '当前显示全局垫图'
-                    : '尚未上传垫图'}
-              </span>
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-gray-800 flex-shrink-0 flex justify-end">
               <button
-                onClick={() => refFileRef.current?.click()}
-                disabled={!chapter || refUploading || refImages.length >= refMax && refSource === 'chapter'}
-                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium rounded-md
-                           bg-violet-600 hover:bg-violet-500 text-white
-                           disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                title={
-                  refImages.length >= refMax && refSource === 'chapter'
-                    ? `已达上限 ${refMax} 张`
-                    : '上传一张垫图'
-                }
+                onClick={handleEditCharSave}
+                disabled={editCharSaving || !editCharName.trim()}
+                className="px-5 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40"
               >
-                {refUploading ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
-                {(refSource === 'story' || refSource === 'asset_group') && refImages.length > 0 ? '上传本话垫图（覆盖全局）' : '添加垫图'}
+                {editCharSaving ? "保存中..." : "保存"}
               </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

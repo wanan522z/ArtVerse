@@ -96,7 +96,7 @@ public class MangaGenerationService {
 
             Map<String, Object> profileResult = characterProfileService.resolveEffective(chapter.getId());
             String profiles = (String) profileResult.get("content");
-            if (mangaStyle == null || mangaStyle.isBlank()) mangaStyle = "japanese";
+            if (mangaStyle == null || mangaStyle.isBlank()) mangaStyle = "japanese_manga";
             String colorMode = chapter.getColorMode().name().toLowerCase();
 
             List<Path> refImages = computeEffectiveRefImages(storyId, chapter.getId(), chapter.getRefImage(),
@@ -268,7 +268,7 @@ public class MangaGenerationService {
         Map<String, Object> profileResult = characterProfileService.resolveEffective(chapterId);
         String profiles = (String) profileResult.get("content");
         String mangaStyle = chapter.getStory().getMangaStyle();
-        if (mangaStyle == null || mangaStyle.isBlank()) mangaStyle = "japanese";
+        if (mangaStyle == null || mangaStyle.isBlank()) mangaStyle = "japanese_manga";
         String colorMode = chapter.getColorMode().name().toLowerCase();
         List<Path> refImages = computeEffectiveRefImages(
                 chapter.getStory().getId(), chapter.getId(), chapter.getRefImage(),
@@ -525,13 +525,19 @@ public class MangaGenerationService {
         return sb.toString();
     }
 
-    private String styleLabel(String mangaStyle, String colorMode) {
+        private String styleLabel(String mangaStyle, String colorMode) {
         String base = switch (mangaStyle) {
-            case "korean" -> "韩式条漫";
-            case "american" -> "美式漫画";
-            case "european" -> "欧式清线漫画";
+            case "korean_webtoon" -> "韩式条漫";
+            case "american_comic" -> "美式漫画";
+            case "ligne_claire" -> "欧式清线漫画";
             case "chinese_ink" -> "水墨国风漫画";
             case "semi_realistic" -> "半厚涂写实漫画";
+            case "realistic" -> "全写实漫画";
+            case "oil_painting" -> "厚涂油画漫画";
+            case "flat_design" -> "扁平极简漫画";
+            case "pixel_art" -> "像素风漫画";
+            case "watercolor" -> "水彩淡雅漫画";
+            case "cyberpunk" -> "赛博朋克漫画";
             default -> "日式漫画";
         };
         String colorTag = switch (colorMode != null ? colorMode : "bw") {

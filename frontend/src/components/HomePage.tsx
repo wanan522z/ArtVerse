@@ -61,6 +61,9 @@ export default function HomePage({ onSelectStory }: Props) {
   const [showNew, setShowNew] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newCoverPreview, setNewCoverPreview] = useState<string | null>(null);
+  const [newCoverBase64, setNewCoverBase64] = useState<string | null>(null);
+  const newCoverInputRef = useRef<HTMLInputElement>(null);
 
   // Edit mode
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -326,17 +329,42 @@ export default function HomePage({ onSelectStory }: Props) {
     try {
       const list = await listStories();
       setStories(list);
-      const charFlags = Object.fromEntries(
-        list.map((s) => [s.id, !!s.has_character_profiles])
-      );
+      const charFlags: Record<number, boolean> = {};
+      await Promise.all(list.map(async (s) => {
+        try {
+          const chars = await listCharacterProfiles(s.id);
+          charFlags[s.id] = chars.length > 0;
+        } catch {
+          charFlags[s.id] = false;
+        }
+      }));
       setStoryCharFlags(charFlags);
-      const refFlags = Object.fromEntries(
-        list.map((s) => [s.id, false])
-      );
+      const refFlags: Record<number, boolean> = {};
+      await Promise.all(list.map(async (s) => {
+        try {
+          const groups = await getStoryAssetGroups(s.id);
+          refFlags[s.id] = groups.length > 0;
+        } catch {
+          refFlags[s.id] = false;
+        }
+      }));
       setStoryRefFlags(refFlags);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleNewCoverFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setNewCoverPreview(dataUrl);
+      setNewCoverBase64(dataUrl.split(',')[1]);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const handleCreate = async () => {
@@ -344,11 +372,24 @@ export default function HomePage({ onSelectStory }: Props) {
     const desc = newDesc.trim();
     const s = await createStory(title, desc);
     setStories((prev) => [s, ...prev]);
-    setStoryCharFlags((prev) => ({ ...prev, [s.id]: !!s.has_character_profiles }));
+    setStoryCharFlags((prev) => ({ ...prev, [s.id]: false }));
     setStoryRefFlags((prev) => ({ ...prev, [s.id]: false }));
+    // Upload cover if selected
+    if (newCoverBase64) {
+      try {
+        const coverPath = await uploadStoryCover(s.id, newCoverBase64);
+        setStories((prev) =>
+          prev.map((st) => (st.id === s.id ? { ...st, cover_image: coverPath } : st))
+        );
+      } catch (err: any) {
+        console.error('Cover upload failed:', err);
+      }
+    }
     setShowNew(false);
     setNewTitle('');
     setNewDesc('');
+    setNewCoverPreview(null);
+    setNewCoverBase64(null);
   };
 
   const handleDelete = async (id: number) => {
@@ -515,32 +556,91 @@ export default function HomePage({ onSelectStory }: Props) {
 
       {/* Content */}
       <main className="max-w-6xl mx-auto px-6 py-8">
-        {/* New story dialog */}
+        {/* New story modal */}
         {showNew && (
-          <div className="mb-8 bg-gray-900 border border-gray-700 rounded-xl p-6 shadow-2xl">
-            <h3 className="text-base font-semibold mb-4 flex items-center gap-2">
-              <Plus size={16} className="text-violet-400" />
-              创建新小说
-            </h3>
-            <div className="space-y-3">
-              <input
-                autoFocus
-                placeholder="小说名称"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-                className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm
-                           placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
-              />
-              <textarea
-                placeholder="简短描述（可选）"
-                value={newDesc}
-                onChange={(e) => setNewDesc(e.target.value)}
-                rows={2}
-                className="w-full px-4 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm
-                           placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none"
-              />
-              <div className="flex gap-2 justify-end">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4" onClick={() => setShowNew(false)}>
+            <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <Plus size={16} className="text-violet-400" />
+                  创建新小说
+                </h3>
+                <button onClick={() => setShowNew(false)} className="p-1 text-gray-500 hover:text-gray-300 transition-colors">
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1.5">小说名称</label>
+                  <input
+                    autoFocus
+                    placeholder="输入小说名称"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+                    className="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1.5">简短描述（可选）</label>
+                  <textarea
+                    placeholder="描述..."
+                    value={newDesc}
+                    onChange={(e) => setNewDesc(e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2.5 bg-gray-800 border border-gray-700 rounded-lg text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent resize-none"
+                  />
+                </div>
+
+                {/* Cover upload */}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1.5">小说封面（可选）</label>
+                  <div
+                    onClick={() => { newCoverInputRef.current?.click(); }}
+                    className="relative w-full h-40 bg-gray-800 border border-dashed border-gray-600 hover:border-violet-500 rounded-lg cursor-pointer flex flex-col items-center justify-center overflow-hidden transition-colors group"
+                  >
+                    {newCoverPreview ? (
+                      <img
+                        src={newCoverPreview}
+                        alt="封面预览"
+                        className="w-full h-full object-cover group-hover:opacity-80 transition-opacity"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center gap-1.5 text-gray-500 group-hover:text-gray-300 transition-colors">
+                        <ImagePlus size={28} />
+                        <span className="text-xs">点击上传封面</span>
+                      </div>
+                    )}
+                    {newCoverPreview && (
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+                        <span className="text-xs text-white font-medium">点击更换封面</span>
+                      </div>
+                    )}
+                  </div>
+                  {newCoverPreview && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setNewCoverPreview(null); setNewCoverBase64(null); }}
+                      className="mt-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
+                    >
+                      移除封面
+                    </button>
+                  )}
+                  <input
+                    ref={newCoverInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleNewCoverFile}
+                  />
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 py-3 border-t border-gray-800 flex justify-end gap-2">
                 <button
                   onClick={() => setShowNew(false)}
                   className="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
@@ -820,7 +920,7 @@ export default function HomePage({ onSelectStory }: Props) {
                               暂无角色卡，请先在小说卡片处添加角色卡
                             </p>
                           ) : (
-                            <div className="grid grid-cols-4 gap-3 max-h-56 overflow-y-auto pr-1">
+                            <div className="grid grid-cols-4 gap-3">
                               {allStoryCharacters.map((ch) => {
                                 const checked = assetDraftCharIds.has(ch.id);
                                 const thumb = charThumbnails[ch.id];
@@ -852,7 +952,7 @@ export default function HomePage({ onSelectStory }: Props) {
                                         <img
                                           src={thumb}
                                           alt={ch.name}
-                                          className="w-full h-full object-cover"
+                                          className="w-full h-full object-contain"
                                           loading="lazy"
                                         />
                                       ) : (

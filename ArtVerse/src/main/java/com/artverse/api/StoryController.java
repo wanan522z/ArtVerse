@@ -92,8 +92,8 @@ public class StoryController {
     @PutMapping("/{id}/manga-style")
     public Map<String, String> setMangaStyle(@PathVariable Long id, @RequestBody Map<String, String> body) {
         String style = body.get("manga_style");
-        if (style == null || style.isBlank()) style = "japanese";
-        Set<String> allowed = Set.of("japanese", "korean", "american", "european", "chinese_ink", "semi_realistic");
+        if (style == null || style.isBlank()) style = "japanese_manga";
+        Set<String> allowed = Set.of("japanese_manga", "korean_webtoon", "american_comic", "ligne_claire", "chinese_ink", "semi_realistic", "realistic", "oil_painting", "flat_design", "pixel_art", "watercolor", "cyberpunk");
         if (!allowed.contains(style)) throw new com.artverse.common.BusinessException(400, "Invalid manga style");
         storyService.setMangaStyle(id, style);
         return Map.of("manga_style", style);

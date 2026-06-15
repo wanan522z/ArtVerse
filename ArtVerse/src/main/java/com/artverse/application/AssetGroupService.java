@@ -13,8 +13,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -119,4 +121,46 @@ public class AssetGroupService {
         chapterRepository.save(chapter);
         return group;
     }
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getChapterAssetGroupData(Long chapterId) {
+        Chapter chapter = chapterRepository.findById(chapterId)
+                .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
+
+        // Force init lazy collections
+        chapter.getStory().getAssetGroups().size();
+
+        List<Map<String, Object>> groups = chapter.getStory().getAssetGroups().stream()
+                .map(g -> {
+                    Map<String, Object> gm = new HashMap<>();
+                    gm.put("id", g.getId());
+                    gm.put("name", g.getName());
+                    gm.put("description", g.getDescription() != null ? g.getDescription() : "");
+                    gm.put("is_default", false);
+                    // Force init characters collection
+                    boolean hasChars = !g.getCharacters().isEmpty();
+                    gm.put("has_character_profiles", hasChars);
+                    // Include character list for the selected group
+                    if (chapter.getAssetGroup() != null && g.getId().equals(chapter.getAssetGroup().getId())) {
+                        List<Map<String, Object>> chars = g.getCharacters().stream()
+                                .map(cp -> {
+                                    Map<String, Object> cm = new HashMap<>();
+                                    cm.put("id", cp.getId());
+                                    cm.put("name", cp.getName());
+                                    cm.put("description", cp.getDescription());
+                                    return cm;
+                                })
+                                .toList();
+                        gm.put("characters", chars);
+                    }
+                    return gm;
+                }).toList();
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("groups", groups);
+        result.put("max", 4);
+        result.put("selected_group_id", chapter.getAssetGroup() != null ? chapter.getAssetGroup().getId() : null);
+        return result;
+    }
+
 }

@@ -97,14 +97,14 @@ export default function App() {
           <button onClick={()=>setSidebarOpen(!sidebarOpen)} className="text-gray-500 hover:text-gray-300 ml-auto">{sidebarOpen?<PanelLeftClose size={16}/>:<PanelLeftOpen size={16}/>}</button>
         </div>
         <nav className="flex-1 flex flex-col gap-1 px-2 py-3">
-          {navItem(<Globe size={18}/>,'Square','square')}
-          {navItem(<BookOpenText size={18}/>,'Workspace','workspace')}
-          {navItem(<FileText size={18}/>,'My Works','myworks')}
-          {navItem(<Paintbrush size={18}/>,'Image Gen','imagegen')}
+          {navItem(<Globe size={18}/>,'广场','square')}
+          {navItem(<BookOpenText size={18}/>,'工作区','workspace')}
+          {navItem(<FileText size={18}/>,'作品管理','myworks')}
+          {navItem(<Paintbrush size={18}/>,'生图','imagegen')}
         </nav>
         <div className="px-2 py-3 border-t border-gray-800 flex flex-col gap-1">
-          <button onClick={()=>setSettingsOpen(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-200 hover:bg-gray-800/50"><KeyRound size={18}/>{sidebarOpen&&<span>Settings</span>}</button>
-          <button onClick={()=>{logoutUser();setAuthenticated(false)}} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-red-400 hover:bg-gray-800/50"><LogOut size={18}/>{sidebarOpen&&<span>Logout</span>}</button>
+          <button onClick={()=>setSettingsOpen(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-200 hover:bg-gray-800/50"><KeyRound size={18}/>{sidebarOpen&&<span>设置</span>}</button>
+          <button onClick={()=>{logoutUser();setAuthenticated(false)}} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-red-400 hover:bg-gray-800/50"><LogOut size={18}/>{sidebarOpen&&<span>退出</span>}</button>
         </div>
       </aside>
 

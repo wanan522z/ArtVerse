@@ -79,7 +79,7 @@ public class StoryService {
     @Transactional(readOnly = true)
     public String getMangaStyle(Long id) {
         Story story = getRequired(id);
-        return story.getMangaStyle() != null ? story.getMangaStyle() : "japanese";
+        return story.getMangaStyle() != null ? story.getMangaStyle() : "japanese_manga";
     }
 
     @Transactional
