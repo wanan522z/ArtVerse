@@ -6,6 +6,7 @@ com\artverse\domain\ColorMode.class
 com\artverse\persistence\ChatMessageRepository.class
 com\artverse\agents\AgentMessage.class
 com\artverse\domain\UserApiKey.class
+com\artverse\application\GenerationGuardService$MangaStreamGuard.class
 com\artverse\application\MangaGenerationService.class
 com\artverse\api\dto\ChapterDto$MangaImageDto.class
 com\artverse\domain\CharacterProfile.class
@@ -43,6 +44,7 @@ com\artverse\common\aspect\RateLimit.class
 com\artverse\agents\AgentScopeHarnessAgentGateway.class
 com\artverse\api\ChapterController.class
 com\artverse\api\dto\AuthDtos$ApiKeyRequest.class
+com\artverse\application\GenerationRequestKeyBuilder.class
 com\artverse\ai\ImageGenerationRequest.class
 com\artverse\ai\CozeClient$1.class
 com\artverse\domain\User.class
@@ -76,6 +78,7 @@ com\artverse\common\aspect\RateLimitAspect.class
 com\artverse\config\CorsConfig.class
 com\artverse\domain\ContentSource.class
 com\artverse\api\WorksController.class
+com\artverse\application\GenerationGuardService.class
 com\artverse\application\AuthService.class
 com\artverse\application\MangaGenerationService$1.class
 com\artverse\config\ArtVerseProperties$Manga.class

@@ -61,7 +61,7 @@ public class MangaGenerationService {
     @Transactional
     public SseEmitter generateMangaStream(Long chapterId, String imageApiKey, String deepseekApiKey,
                                           Runnable onComplete, Consumer<String> onError) {
-        Chapter chapter = chapterRepository.findById(chapterId)
+        Chapter chapter = chapterRepository.findByIdForIdempotency(chapterId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
 
         // Check if already running
@@ -263,7 +263,7 @@ public class MangaGenerationService {
 
     @Transactional
     public MangaImage regenerateImage(Long chapterId, int imageNumber, String prompt, String imageApiKey, String deepseekApiKey) {
-        Chapter chapter = chapterRepository.findById(chapterId)
+        Chapter chapter = chapterRepository.findByIdForIdempotency(chapterId)
                 .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
 
         if (imageNumber < 1 || imageNumber > chapter.getImageCount()) {

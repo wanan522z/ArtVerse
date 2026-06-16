@@ -2,12 +2,11 @@ package com.artverse.api;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.artverse.application.ApiKeyService;
-import com.artverse.application.IdempotencyService;
+import com.artverse.application.GenerationGuardService;
 import com.artverse.application.MangaGenerationService;
 import com.artverse.common.BusinessException;
 import com.artverse.domain.MangaImage;
 import com.artverse.domain.User;
-import com.artverse.persistence.ChapterRepository;
 import com.artverse.persistence.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -29,32 +28,17 @@ public class MangaGenerationController {
     private final MangaGenerationService mangaGenerationService;
     private final UserRepository userRepository;
     private final ApiKeyService apiKeyService;
-    private final IdempotencyService idempotencyService;
-    private final ChapterRepository chapterRepository;
+    private final GenerationGuardService generationGuardService;
 
     @PostMapping("/generate-manga-stream")
     public SseEmitter generateMangaStream(@PathVariable Long chapterId) {
         User user = currentUser();
-        var chapter = chapterRepository.findById(chapterId)
-                .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
-        Map<String, Object> canonical = Map.of(
-                "action", "generate-manga",
-                "userId", user.getId(),
-                "chapterId", chapterId,
-                "storyId", chapter.getStory().getId(),
-                "imageCount", chapter.getImageCount(),
-                "colorMode", String.valueOf(chapter.getColorMode()),
-                "mangaStyle", chapter.getStory().getMangaStyle() == null ? "" : chapter.getStory().getMangaStyle(),
-                "assetGroupId", chapter.getAssetGroup() == null ? 0 : chapter.getAssetGroup().getId(),
-                "scenes", chapter.getScenesText() == null ? "" : chapter.getScenesText()
-        );
-        idempotencyService.rejectIfProcessing("generate-manga", "u" + user.getId(), canonical);
-        idempotencyService.markProcessing("generate-manga", "u" + user.getId(), canonical);
+        GenerationGuardService.MangaStreamGuard guard = generationGuardService.guardMangaStream(user.getId(), chapterId);
         String imageApiKey = apiKeyService.getDecryptedKey(user, "image2");
         String deepseekApiKey = apiKeyService.getDecryptedKey(user, "deepseek");
         return mangaGenerationService.generateMangaStream(chapterId, imageApiKey, deepseekApiKey,
-                () -> idempotencyService.markSucceeded("generate-manga", "u" + user.getId(), canonical, Map.of("chapter_id", chapterId)),
-                error -> idempotencyService.markFailed("generate-manga", "u" + user.getId(), canonical, error));
+                guard.onComplete(),
+                guard.onError());
     }
 
     @PostMapping("/regenerate-image/{imageNumber}")
@@ -65,23 +49,11 @@ public class MangaGenerationController {
         String imageApiKey = apiKeyService.getDecryptedKey(user, "image2");
         String deepseekApiKey = apiKeyService.getDecryptedKey(user, "deepseek");
         String prompt = body.get("prompt");
-        var chapter = chapterRepository.findById(chapterId)
-                .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
-        Map<String, Object> canonical = Map.of(
-                "action", "regenerate-image",
-                "userId", user.getId(),
-                "chapterId", chapterId,
-                "storyId", chapter.getStory().getId(),
-                "imageNumber", imageNumber,
-                "prompt", idempotencyService.normalizeText(prompt),
-                "colorMode", String.valueOf(chapter.getColorMode()),
-                "mangaStyle", chapter.getStory().getMangaStyle() == null ? "" : chapter.getStory().getMangaStyle(),
-                "assetGroupId", chapter.getAssetGroup() == null ? 0 : chapter.getAssetGroup().getId()
-        );
-        Map<String, Object> result = idempotencyService.executeHttp(
-                "regenerate-image",
-                "u" + user.getId(),
-                canonical,
+        Map<String, Object> result = generationGuardService.executeImageRegeneration(
+                user.getId(),
+                chapterId,
+                imageNumber,
+                prompt,
                 () -> mangaImageToMap(mangaGenerationService.regenerateImage(chapterId, imageNumber, prompt, imageApiKey, deepseekApiKey))
         );
         return mapToMangaImage(result);
