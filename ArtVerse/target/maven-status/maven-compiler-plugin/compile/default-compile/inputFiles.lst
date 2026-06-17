@@ -19,6 +19,7 @@ D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\dto\Chap
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\ExportImportController.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\GuardStatsController.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\ImageGenController.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\MangaAgentController.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\MangaGenerationController.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\NovelController.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\ReferenceImageController.java
@@ -47,6 +48,8 @@ D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\Hashing.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\IdempotencyService.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\ImageGenService.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\MangaAgentService.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\MangaAgentToolFactory.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\MangaGenerationJob.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\MangaGenerationService.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\NovelService.java

@@ -1128,3 +1128,13 @@ export async function getGuardEvents(limit = 100): Promise<{ events: GuardEvent[
   if (!res.ok) throw new Error(parseApiError(await res.text()));
   return res.json();
 }
+
+export async function runMangaAgent(chapterId: number, message: string): Promise<{ reply: string }> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  return res.json();
+}

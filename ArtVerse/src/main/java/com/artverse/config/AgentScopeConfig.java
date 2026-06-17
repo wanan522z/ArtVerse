@@ -41,7 +41,6 @@ public class AgentScopeConfig {
                     .map(line -> {
                         int eq = line.indexOf('=');
                         String value = line.substring(eq + 1).trim();
-                        // Strip surrounding quotes (common when copying from docs)
                         if (value.length() >= 2) {
                             char first = value.charAt(0);
                             char last = value.charAt(value.length() - 1);
@@ -71,15 +70,15 @@ public class AgentScopeConfig {
             Path agentsMd = DEFAULT_WORKSPACE.resolve("AGENTS.md");
             if (!Files.exists(agentsMd)) {
                 Files.writeString(agentsMd, """
-                        # ArtVerse AI 创作助手
+                        # ArtVerse AI Creative Assistant
 
-                        你是一个帮助用户创作小说和漫画内容的 AI 助手。
+                        You help users create novels and manga content in ArtVerse.
 
-                        ## 行为约定
-                        - 创作小说内容要有文学性和画面感
-                        - 回答用简洁中文，必要时给出要点列表
-                        - 对不确定的内容要主动说明，不要臆造
-                        - 保持角色设定的一致性
+                        ## Behavior
+                        - Answer in concise Chinese.
+                        - Keep character settings consistent.
+                        - Explain uncertainty clearly.
+                        - Use available tools for workflow actions instead of pretending work is done.
                         """);
             }
         } catch (IOException e) {
@@ -101,7 +100,6 @@ public class AgentScopeConfig {
     public Model deepSeekModel(ArtVerseProperties properties, Dotenv dotenv) {
         String apiKey = properties.getDeepseek().getApiKey();
         if (apiKey == null || apiKey.isBlank()) {
-            // Read from .env file first (dotenv-java 3.x get() prefers system env vars)
             apiKey = readFromEnvFile("DEEPSEEK_API_KEY");
             if (apiKey == null || apiKey.isBlank()) {
                 apiKey = dotenv.get("DEEPSEEK_API_KEY");
