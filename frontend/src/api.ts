@@ -1129,11 +1129,28 @@ export async function getGuardEvents(limit = 100): Promise<{ events: GuardEvent[
   return res.json();
 }
 
-export async function runMangaAgent(chapterId: number, message: string): Promise<{ reply: string }> {
+export interface MangaAgentMessage {
+  id: number;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  request_id?: string;
+  requestId?: string;
+  created_at?: string;
+  createdAt?: string;
+}
+
+export async function getMangaAgentMessages(chapterId: number): Promise<MangaAgentMessage[]> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/messages`);
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  const data = await res.json();
+  return data.messages || [];
+}
+
+export async function runMangaAgent(chapterId: number, message: string, requestId?: string): Promise<{ reply: string; request_id?: string; requestId?: string }> {
   const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, requestId }),
   });
   if (!res.ok) throw new Error(parseApiError(await res.text()));
   return res.json();

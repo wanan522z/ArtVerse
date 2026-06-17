@@ -1,4 +1,5 @@
 com\artverse\config\ArtVerseProperties$Idempotency.class
+com\artverse\api\dto\MangaAgentDtos$MessageDto.class
 com\artverse\common\GlobalExceptionHandler.class
 com\artverse\config\ArtVerseProperties.class
 com\artverse\application\MangaGenerationJob.class
@@ -8,6 +9,8 @@ com\artverse\agents\AgentMessage.class
 com\artverse\domain\UserApiKey.class
 com\artverse\application\GenerationGuardService$MangaStreamGuard.class
 com\artverse\application\MangaGenerationService.class
+com\artverse\domain\MangaAgentMessage.class
+com\artverse\api\dto\MangaAgentDtos$RunRequest.class
 com\artverse\api\dto\ChapterDto$MangaImageDto.class
 com\artverse\domain\ImageGenRecord.class
 com\artverse\domain\CharacterProfile.class
@@ -26,6 +29,7 @@ com\artverse\api\GuardStatsController.class
 com\artverse\application\RequestCanonicalizer.class
 com\artverse\application\SceneService.class
 com\artverse\config\ArtVerseProperties$SingleFlight.class
+com\artverse\api\dto\MangaAgentDtos$RunResponse.class
 com\artverse\application\IdempotencyService.class
 com\artverse\application\GuardEventPersistenceService.class
 com\artverse\ai\WebClientImage2Client.class
@@ -59,6 +63,7 @@ com\artverse\ai\CozeClient$1.class
 com\artverse\domain\User.class
 com\artverse\persistence\MangaImageRepository.class
 com\artverse\persistence\CharacterProfileRepository.class
+com\artverse\persistence\MangaAgentMessageRepository.class
 com\artverse\config\ArtVerseProperties$Image.class
 com\artverse\domain\ChapterStatus.class
 com\artverse\domain\MangaStyle.class
@@ -111,7 +116,9 @@ com\artverse\application\IdempotencyService$2.class
 com\artverse\persistence\UserApiKeyRepository.class
 com\artverse\application\ApiKeyService.class
 com\artverse\application\MangaAgentService.class
+com\artverse\application\MangaAgentService$RunResult.class
 com\artverse\config\ArtVerseProperties$RateLimit.class
+com\artverse\api\dto\MangaAgentDtos$MessagesResponse.class
 com\artverse\application\GuardEventService.class
 com\artverse\persistence\StoryRepository.class
 com\artverse\ai\CozeClient.class
@@ -123,6 +130,7 @@ com\artverse\config\ArtVerseProperties$Character.class
 com\artverse\application\GuardMetricsService.class
 com\artverse\application\IdempotencyService$1.class
 com\artverse\application\MangaAgentToolFactory$Tools.class
+com\artverse\api\dto\MangaAgentDtos.class
 com\artverse\agents\AgentTaskType.class
 com\artverse\ai\Image2Client.class
 com\artverse\api\ChatController.class

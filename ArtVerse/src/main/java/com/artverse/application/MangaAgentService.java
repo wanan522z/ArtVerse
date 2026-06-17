@@ -5,8 +5,12 @@ import com.artverse.agents.AgentRunRequest;
 import com.artverse.agents.AgentTaskType;
 import com.artverse.agents.HarnessAgentGateway;
 import com.artverse.common.BusinessException;
+import com.artverse.domain.Chapter;
+import com.artverse.domain.MangaAgentMessage;
+import com.artverse.domain.MessageRole;
 import com.artverse.domain.User;
 import com.artverse.persistence.ChapterRepository;
+import com.artverse.persistence.MangaAgentMessageRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,31 +18,55 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class MangaAgentService {
 
+    private static final int HISTORY_LIMIT_FOR_AGENT = 20;
+
     private final ChapterRepository chapterRepository;
+    private final MangaAgentMessageRepository mangaAgentMessageRepository;
     private final HarnessAgentGateway harnessAgentGateway;
     private final ApiKeyService apiKeyService;
 
     @Transactional(readOnly = true)
-    public String run(Long chapterId, String message, User user) {
+    public List<MangaAgentMessage> listMessages(Long chapterId, User user) {
+        ensureChapterVisible(chapterId, user);
+        return mangaAgentMessageRepository.findByUserIdAndChapterIdOrderByCreatedAtAsc(user.getId(), chapterId);
+    }
+
+    public RunResult run(Long chapterId, String message, UUID requestId, User user) {
         if (message == null || message.isBlank()) {
             throw new BusinessException(400, "Message cannot be empty");
         }
-        var chapter = chapterRepository.findByIdForIdempotency(chapterId)
-                .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
+
+        UUID effectiveRequestId = requestId == null ? UUID.randomUUID() : requestId;
+        var cached = mangaAgentMessageRepository
+                .findByUserIdAndRequestIdAndRole(user.getId(), effectiveRequestId, MessageRole.ASSISTANT);
+        if (cached.isPresent()) {
+            return new RunResult(cached.get().getContent(), effectiveRequestId);
+        }
+
+        Chapter chapter = ensureChapterVisible(chapterId, user);
+        List<MangaAgentMessage> history = mangaAgentMessageRepository
+                .findByUserIdAndChapterIdOrderByCreatedAtAsc(user.getId(), chapterId);
 
         List<AgentMessage> messages = new ArrayList<>();
         messages.add(new AgentMessage("system", buildSystemPrompt(chapterId, user)));
+        history.stream()
+                .filter(item -> item.getRole() == MessageRole.USER || item.getRole() == MessageRole.ASSISTANT)
+                .skip(Math.max(0, history.size() - HISTORY_LIMIT_FOR_AGENT))
+                .forEach(item -> messages.add(new AgentMessage(item.getRole().name().toLowerCase(), item.getContent())));
         messages.add(new AgentMessage("user", message));
 
         String deepseekApiKey = apiKeyService.getDecryptedKey(user, "deepseek");
         if (deepseekApiKey == null || deepseekApiKey.isBlank()) {
             throw new BusinessException(400, "请先在设置中配置 DeepSeek API Key 后再使用漫画智能体");
         }
+
+        saveMessage(user, chapter, MessageRole.USER, message, effectiveRequestId);
 
         AgentRunRequest request = new AgentRunRequest(
                 String.valueOf(user.getId()),
@@ -58,12 +86,37 @@ public class MangaAgentService {
             if (result == null || result.isBlank()) {
                 throw new BusinessException(502, "Agent returned empty response");
             }
-            return result;
+            saveMessage(user, chapter, MessageRole.ASSISTANT, result, effectiveRequestId);
+            return new RunResult(result, effectiveRequestId);
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
             throw new BusinessException(502, "Agent service failed: " + (e.getMessage() == null ? "unknown error" : e.getMessage()));
         }
+    }
+
+    private Chapter ensureChapterVisible(Long chapterId, User user) {
+        Chapter chapter = chapterRepository.findByIdForIdempotency(chapterId)
+                .orElseThrow(() -> new BusinessException(404, "Chapter not found"));
+        if (chapter.getStory().getUser() != null && !chapter.getStory().getUser().getId().equals(user.getId())) {
+            throw new BusinessException(403, "Forbidden");
+        }
+        return chapter;
+    }
+
+    @Transactional
+    protected void saveMessage(User user, Chapter chapter, MessageRole role, String content, UUID requestId) {
+        if (mangaAgentMessageRepository.findByUserIdAndRequestIdAndRole(user.getId(), requestId, role).isPresent()) {
+            return;
+        }
+        MangaAgentMessage message = new MangaAgentMessage();
+        message.setUser(user);
+        message.setStory(chapter.getStory());
+        message.setChapter(chapter);
+        message.setRole(role);
+        message.setContent(content);
+        message.setRequestId(requestId);
+        mangaAgentMessageRepository.save(message);
     }
 
     private String buildSystemPrompt(Long chapterId, User user) {
@@ -74,9 +127,13 @@ public class MangaAgentService {
                 Current user id: %s
                 Current chapter id: %s
 
+                The selected story and chapter in the left workspace are the only trusted target context.
+                If the user mentions another chapter, do not silently switch. Ask the user to switch the workspace first.
+
                 You can use tools to inspect chapter context, generate storyboard scenes, and save edited storyboard scenes.
                 Rules:
                 - First inspect chapter context when the user asks about the manga workflow.
+                - Confirm the current chapter in your response before taking costly actions.
                 - If source content is missing, tell the user to write chat content or import novel text first.
                 - If storyboard scenes are missing and the user asks to continue, generate storyboard scenes.
                 - Do not directly claim that images have been generated. Image generation is a long-running SSE task handled by the existing Generate Manga action.
@@ -87,5 +144,8 @@ public class MangaAgentService {
 
     private String nullToBlank(String value) {
         return value == null ? "" : value;
+    }
+
+    public record RunResult(String reply, UUID requestId) {
     }
 }

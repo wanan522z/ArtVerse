@@ -16,6 +16,7 @@ D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\Characte
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\ChatController.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\dto\AuthDtos.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\dto\ChapterDto.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\dto\MangaAgentDtos.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\ExportImportController.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\GuardStatsController.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\api\ImageGenController.java
@@ -78,6 +79,7 @@ D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\ChatM
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\ColorMode.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\ContentSource.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\ImageGenRecord.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\MangaAgentMessage.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\MangaImage.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\MangaStyle.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\MessageRole.java
@@ -91,6 +93,7 @@ D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\CharacterProfileRepository.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\ChatMessageRepository.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\ImageGenRecordRepository.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\MangaAgentMessageRepository.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\MangaImageRepository.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\StoryAssetGroupRepository.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\StoryRepository.java
