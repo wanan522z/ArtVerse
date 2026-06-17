@@ -3,10 +3,8 @@ package com.artverse.api;
 import com.artverse.application.ImageGenService;
 import com.artverse.application.ApiKeyService;
 import com.artverse.application.GenerationGuardService;
-import com.artverse.common.BusinessException;
+import com.artverse.application.CurrentUserService;
 import com.artverse.domain.User;
-import com.artverse.persistence.UserRepository;
-import cn.dev33.satoken.stp.StpUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,7 +19,7 @@ public class ImageGenController {
     private final ImageGenService imageGenService;
     private final ApiKeyService apiKeyService;
     private final GenerationGuardService generationGuardService;
-    private final UserRepository userRepository;
+    private final CurrentUserService currentUserService;
 
     @PostMapping("/generate")
     public Map<String, Object> generate(@RequestBody Map<String, Object> body) {
@@ -50,8 +48,6 @@ public class ImageGenController {
     }
 
     private User currentUser() {
-        Long userId = StpUtil.getLoginIdAsLong();
-        return userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(404, "User not found"));
+        return currentUserService.requireCurrentUser();
     }
 }

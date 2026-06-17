@@ -17,7 +17,7 @@ import java.util.Map;
 public class GenerationRequestKeyBuilder {
 
     private final ChapterRepository chapterRepository;
-    private final IdempotencyService idempotencyService;
+    private final RequestCanonicalizer canonicalizer;
     private final ArtVerseProperties properties;
 
     public Map<String, Object> imageGeneration(Long userId, String prompt, List<String> referenceImages) {
@@ -26,9 +26,9 @@ public class GenerationRequestKeyBuilder {
         canonical.put("userId", userId);
         canonical.put("model", properties.getImage().getModel());
         canonical.put("size", properties.getImage().getSize());
-        canonical.put("prompt", idempotencyService.normalizeText(prompt));
+        canonical.put("prompt", canonicalizer.normalizeText(prompt));
         canonical.put("refImages", referenceImages == null ? List.of() : referenceImages.stream()
-                .map(idempotencyService::imageHash)
+                .map(canonicalizer::imageHash)
                 .toList());
         return canonical;
     }
@@ -46,7 +46,7 @@ public class GenerationRequestKeyBuilder {
         Chapter chapter = chapterForIdempotency(chapterId);
         Map<String, Object> canonical = chapterBase("regenerate-image", userId, chapter);
         canonical.put("imageNumber", imageNumber);
-        canonical.put("prompt", idempotencyService.normalizeText(prompt));
+        canonical.put("prompt", canonicalizer.normalizeText(prompt));
         return canonical;
     }
 
@@ -60,7 +60,7 @@ public class GenerationRequestKeyBuilder {
         canonical.put("storyId", chapter.getStory().getId());
         canonical.put("imageCount", chapter.getImageCount());
         canonical.put("workflowId", properties.getCoze().getWorkflowId());
-        canonical.put("material", idempotencyService.normalizeText(chapter.novelContentOrJoinedMessages()));
+        canonical.put("material", canonicalizer.normalizeText(chapter.novelContentOrJoinedMessages()));
         return canonical;
     }
 

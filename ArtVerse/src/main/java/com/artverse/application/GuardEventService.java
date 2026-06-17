@@ -20,10 +20,19 @@ public class GuardEventService {
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+    private final GuardEventPersistenceService persistenceService;
 
     public List<Map<String, Object>> recentEvents(int limit) {
         int safeLimit = Math.max(1, Math.min(MAX_LIMIT, limit));
-        List<String> rawEvents = redisTemplate.opsForList().range(EVENT_LIST_KEY, 0, safeLimit - 1);
+        try {
+            List<Map<String, Object>> persisted = persistenceService.recentEvents(safeLimit);
+            if (!persisted.isEmpty()) {
+                return persisted;
+            }
+        } catch (Exception e) {
+            log.debug("Failed to read persisted guard events: {}", e.getMessage());
+        }
+        List<String> rawEvents = redisTemplate.opsForList().range(EVENT_LIST_KEY + ":" + java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")), 0, safeLimit - 1);
         if (rawEvents == null || rawEvents.isEmpty()) {
             return List.of();
         }

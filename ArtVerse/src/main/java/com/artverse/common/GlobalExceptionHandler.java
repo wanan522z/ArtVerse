@@ -1,5 +1,6 @@
 package com.artverse.common;
 
+import cn.dev33.satoken.exception.NotLoginException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -23,6 +24,14 @@ public class GlobalExceptionHandler {
             body.put("provider", ex.getProvider());
         }
         return ResponseEntity.status(ex.getStatus()).body(body);
+    }
+
+    @ExceptionHandler(NotLoginException.class)
+    public ResponseEntity<Map<String, Object>> handleNotLogin(NotLoginException ex) {
+        log.info("Authentication required: {}", ex.getMessage());
+        return ResponseEntity.status(401).body(Map.of(
+                "detail", "Login expired",
+                "code", "AUTH_EXPIRED"));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

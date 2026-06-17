@@ -31,6 +31,11 @@ export function clearAuth(): void {
   localStorage.removeItem(LS_USER);
 }
 
+function notifyAuthExpired(): void {
+  clearAuth();
+  window.dispatchEvent(new CustomEvent('artverse:auth-expired'));
+}
+
 let refreshPromise: Promise<boolean> | null = null;
 
 async function tryRefreshToken(): Promise<boolean> {
@@ -175,8 +180,7 @@ async function authFetch(input: RequestInfo, init?: RequestInit): Promise<Respon
     if (refreshed) {
       res = await fetch(input, { ...init, headers: { ...apiHeaders(), ...(init?.headers || {}) } });
     } else {
-      clearAuth();
-      window.dispatchEvent(new CustomEvent('artverse:auth-expired'));
+      notifyAuthExpired();
     }
   }
   return res;
@@ -327,8 +331,7 @@ export function importStoryPackage(
             doSend();
             return;
           }
-          clearAuth();
-          window.dispatchEvent(new CustomEvent('artverse:auth-expired'));
+          notifyAuthExpired();
           reject(new Error('Login expired'));
           return;
         }
@@ -1083,6 +1086,26 @@ export interface GuardStatsPayload {
 
 export async function getGuardStats(): Promise<GuardStatsPayload> {
   const res = await fetch(BASE + '/api/internal/guard/stats');
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  return res.json();
+}
+
+export interface GuardMetricBucket {
+  bucket_type: string;
+  bucket_start: string;
+  action: string;
+  total: number;
+  leader: number;
+  follower: number;
+  success_hit: number;
+  failed_hit: number;
+  follower_rejected: number;
+  processing_rejected: number;
+  failed: number;
+}
+
+export async function getGuardMetrics(bucket = 'HOUR', range = 24): Promise<{ updated_at: string; bucket_type: string; items: GuardMetricBucket[] }> {
+  const res = await fetch(BASE + '/api/internal/guard/metrics?bucket=' + bucket + '&range=' + range);
   if (!res.ok) throw new Error(parseApiError(await res.text()));
   return res.json();
 }

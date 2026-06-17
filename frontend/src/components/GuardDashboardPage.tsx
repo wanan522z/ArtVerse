@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Activity, AlertTriangle, Gauge, RefreshCw, ShieldCheck, TimerReset, Zap } from 'lucide-react';
-import { getGuardEvents, getGuardStats, type GuardActionStats, type GuardEvent, type GuardStatsPayload } from '../api';
+import {
+  getGuardEvents,
+  getGuardMetrics,
+  getGuardStats,
+  type GuardActionStats,
+  type GuardEvent,
+  type GuardMetricBucket,
+  type GuardStatsPayload,
+} from '../api';
 
 const ACTION_LABELS: Record<string, string> = {
   'image-gen': 'HTTP Image',
@@ -104,9 +112,37 @@ function totals(actions: GuardActionStats[]) {
   };
 }
 
+function bucketTotals(items: GuardMetricBucket[]) {
+  return items.reduce(
+    (acc, item) => {
+      acc.total += item.total;
+      acc.leader += item.leader;
+      acc.follower += item.follower;
+      acc.successHit += item.success_hit;
+      acc.failedHit += item.failed_hit;
+      acc.rejected += item.follower_rejected + item.processing_rejected;
+      acc.failed += item.failed;
+      return acc;
+    },
+    { total: 0, leader: 0, follower: 0, successHit: 0, failedHit: 0, rejected: 0, failed: 0 },
+  );
+}
+
+function formatBucketTime(value: string, bucket: string): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (bucket === 'DAY') return date.toLocaleDateString();
+  if (bucket === 'HOUR') {
+    return date.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 export default function GuardDashboardPage() {
   const [data, setData] = useState<GuardStatsPayload | null>(null);
   const [events, setEvents] = useState<GuardEvent[]>([]);
+  const [metricBucket, setMetricBucket] = useState('HOUR');
+  const [metrics, setMetrics] = useState<GuardMetricBucket[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -136,7 +172,15 @@ export default function GuardDashboardPage() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useEffect(() => {
+    const range = metricBucket === 'MINUTE' ? 60 : metricBucket === 'DAY' ? 30 : 24;
+    getGuardMetrics(metricBucket, range)
+      .then((payload) => setMetrics(payload.items || []))
+      .catch(() => setMetrics([]));
+  }, [metricBucket, refreshing, data?.updated_at]);
+
   const summary = useMemo(() => totals(data?.actions || []), [data]);
+  const historySummary = useMemo(() => bucketTotals(metrics), [metrics]);
 
   return (
     <div className="min-h-dvh bg-gray-950 text-gray-100">
@@ -225,6 +269,69 @@ export default function GuardDashboardPage() {
               {loading && (
                 <div className="px-4 py-12 text-center text-sm text-gray-500">Loading guard metrics...</div>
               )}
+            </div>
+          </section>
+
+          <section className="overflow-hidden rounded-lg border border-white/10 bg-gray-900/50">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-100">Historical Buckets</h2>
+                <p className="mt-1 text-xs text-gray-500">
+                  Persistent DB metrics 路 total {number(historySummary.total)} 路 hit {percent(historySummary.total ? historySummary.successHit / historySummary.total : 0)}
+                </p>
+              </div>
+              <div className="flex rounded-lg border border-white/10 bg-gray-950/70 p-1">
+                {[
+                  ['MINUTE', '60m'],
+                  ['HOUR', '24h'],
+                  ['DAY', '30d'],
+                ].map(([value, label]) => (
+                  <button
+                    key={value}
+                    onClick={() => setMetricBucket(value)}
+                    className={`h-8 rounded-md px-3 text-xs font-medium ${
+                      metricBucket === value ? 'bg-cyan-500/20 text-cyan-200' : 'text-gray-400 hover:text-gray-100'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-xs">
+                <thead className="bg-gray-950/70 text-gray-500">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">Bucket</th>
+                    <th className="px-3 py-2 font-medium">Action</th>
+                    <th className="px-3 py-2 text-right font-medium">Total</th>
+                    <th className="px-3 py-2 text-right font-medium">Leader</th>
+                    <th className="px-3 py-2 text-right font-medium">Follower</th>
+                    <th className="px-3 py-2 text-right font-medium">Hit</th>
+                    <th className="px-3 py-2 text-right font-medium">Rejected</th>
+                    <th className="px-3 py-2 text-right font-medium">Failed</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10">
+                  {metrics.map((item) => (
+                    <tr key={`${item.bucket_start}-${item.action}`} className="hover:bg-white/[0.03]">
+                      <td className="whitespace-nowrap px-4 py-2 text-gray-400">{formatBucketTime(item.bucket_start, metricBucket)}</td>
+                      <td className="px-3 py-2 text-gray-200">{ACTION_LABELS[item.action] || item.action}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-200">{number(item.total)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-cyan-200">{number(item.leader)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-amber-200">{number(item.follower)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-emerald-200">{number(item.success_hit)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-rose-200">{number(item.follower_rejected + item.processing_rejected)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-orange-200">{number(item.failed)}</td>
+                    </tr>
+                  ))}
+                  {!metrics.length && (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-gray-500">No persisted metrics yet.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </section>
 

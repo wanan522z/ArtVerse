@@ -29,4 +29,10 @@ public class GuardStatsController {
         List<Map<String, Object>> events = guardEventService.recentEvents(limit);
         return Map.of("events", events);
     }
+
+    @GetMapping("/metrics")
+    public Map<String, Object> metrics(@RequestParam(defaultValue = "HOUR") String bucket,
+                                       @RequestParam(defaultValue = "24") int range) {
+        return guardStatsService.metricBuckets(bucket, range);
+    }
 }

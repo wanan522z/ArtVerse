@@ -1,7 +1,6 @@
 package com.artverse.application;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -20,7 +19,8 @@ public class GuardStatsService {
             "regenerate-image"
     );
 
-    private final StringRedisTemplate redisTemplate;
+    private final GuardMetricsService metricsService;
+    private final GuardMetricBucketService bucketService;
 
     public Map<String, Object> stats() {
         List<Map<String, Object>> actions = ACTIONS.stream()
@@ -34,7 +34,7 @@ public class GuardStatsService {
     }
 
     private Map<String, Object> actionStats(String action) {
-        Map<Object, Object> raw = redisTemplate.opsForHash().entries("idem:stats:" + action);
+        Map<Object, Object> raw = metricsService.readStats(action);
         long total = value(raw, "total");
         long leader = value(raw, "leader");
         long follower = value(raw, "follower");
@@ -74,5 +74,13 @@ public class GuardStatsService {
     private double rate(long numerator, long denominator) {
         if (denominator <= 0) return 0D;
         return (double) numerator / denominator;
+    }
+
+    public Map<String, Object> metricBuckets(String bucketType, int range) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("updated_at", OffsetDateTime.now().toString());
+        response.put("bucket_type", bucketType);
+        response.put("items", bucketService.query(bucketType, range));
+        return response;
     }
 }
