@@ -7,6 +7,7 @@ com\artverse\domain\ColorMode.class
 com\artverse\prompt\MangaPromptPolicy.class
 com\artverse\persistence\ChatMessageRepository.class
 com\artverse\agents\AgentMessage.class
+com\artverse\agents\AgentWorkspaceService.class
 com\artverse\domain\UserApiKey.class
 com\artverse\application\MangaGenerationService.class
 com\artverse\domain\MangaAgentMessage.class
@@ -36,6 +37,7 @@ com\artverse\application\ChapterService.class
 com\artverse\common\aspect\SingleFlight.class
 com\artverse\ai\CozeClient$2.class
 com\artverse\storage\StoredObject.class
+com\artverse\agents\AgentSessionIdFactory.class
 com\artverse\ArtVerseApplication.class
 com\artverse\agents\AgentRunRequest.class
 com\artverse\application\WorksService.class
@@ -79,6 +81,7 @@ com\artverse\config\ArtVerseProperties$Ref.class
 com\artverse\api\dto\ChapterDto.class
 com\artverse\api\ReferenceImageController.class
 com\artverse\common\aspect\SingleFlightAspect.class
+com\artverse\agents\AgentWorkspaceSyncService.class
 com\artverse\domain\MessageRole.class
 com\artverse\domain\StoryAssetGroup.class
 com\artverse\persistence\StoryAssetGroupRepository.class

@@ -2,6 +2,7 @@ package com.artverse.agents;
 
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -97,6 +98,39 @@ class AgentScopeHarnessAgentGatewayTest {
                 .isNotEqualTo(cacheKey(requestWithSpec("user-2", spec)));
     }
 
+    @Test
+    void runtimeSessionIdIsStableWhenModelChanges() {
+        AgentRunRequest first = requestWithSpec("user-1", new AgentModelSpec(
+                "deepseek",
+                "https://api.deepseek.com",
+                "deepseek-chat",
+                "key-a"
+        ));
+        AgentRunRequest second = requestWithSpec("user-1", new AgentModelSpec(
+                "deepseek",
+                "https://api.deepseek.com",
+                "deepseek-reasoner",
+                "key-b"
+        ));
+        AgentSessionIdFactory factory = new AgentSessionIdFactory();
+
+        assertThat(AgentScopeHarnessAgentGateway.buildRuntimeContextForTest(first, factory).getSessionId())
+                .isEqualTo(AgentScopeHarnessAgentGateway.buildRuntimeContextForTest(second, factory).getSessionId());
+    }
+
+    @Test
+    void cacheKeyChangesWhenWorkspaceChanges() {
+        AgentRunRequest request = requestWithSpec("user-1", new AgentModelSpec(
+                "deepseek",
+                "https://api.deepseek.com",
+                "deepseek-chat",
+                "key-a"
+        ));
+
+        assertThat(cacheKey(request, Path.of(".agentscope/workspace/users/user-1/stories/1")))
+                .isNotEqualTo(cacheKey(request, Path.of(".agentscope/workspace/users/user-2/stories/1")));
+    }
+
     private static AgentRunRequest requestWithSpec(String userId, AgentModelSpec spec) {
         return new AgentRunRequest(
                 userId,
@@ -111,9 +145,14 @@ class AgentScopeHarnessAgentGatewayTest {
     }
 
     private static String cacheKey(AgentRunRequest request) {
+        return cacheKey(request, null);
+    }
+
+    private static String cacheKey(AgentRunRequest request, Path workspace) {
         return AgentScopeHarnessAgentGateway.buildAgentCacheKey(
                 request,
-                new AgentModelSpec("deepseek", "https://api.deepseek.com", "deepseek-chat", "fallback")
+                new AgentModelSpec("deepseek", "https://api.deepseek.com", "deepseek-chat", "fallback"),
+                workspace
         );
     }
 }

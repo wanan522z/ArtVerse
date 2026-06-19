@@ -4,6 +4,7 @@ import com.artverse.agents.AgentMessage;
 import com.artverse.agents.AgentRunRequest;
 import com.artverse.agents.AgentTaskType;
 import com.artverse.agents.AgentModelSpecFactory;
+import com.artverse.agents.AgentWorkspaceSyncService;
 import com.artverse.agents.HarnessAgentGateway;
 import com.artverse.common.BusinessException;
 import com.artverse.domain.Chapter;
@@ -31,6 +32,7 @@ public class MangaAgentService {
     private final MangaAgentMessageRepository mangaAgentMessageRepository;
     private final HarnessAgentGateway harnessAgentGateway;
     private final AgentModelSpecFactory agentModelSpecFactory;
+    private final AgentWorkspaceSyncService agentWorkspaceSyncService;
     private final ApiKeyService apiKeyService;
 
     @Transactional(readOnly = true)
@@ -69,6 +71,7 @@ public class MangaAgentService {
         }
 
         saveMessage(user, chapter, MessageRole.USER, message, effectiveRequestId);
+        agentWorkspaceSyncService.syncMangaDirectorKnowledge(chapterId, String.valueOf(user.getId()));
 
         AgentRunRequest request = new AgentRunRequest(
                 String.valueOf(user.getId()),

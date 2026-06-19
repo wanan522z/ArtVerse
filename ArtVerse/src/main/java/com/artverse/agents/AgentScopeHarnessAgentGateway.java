@@ -11,7 +11,6 @@ import io.agentscope.core.model.OpenAIChatModel;
 import io.agentscope.harness.agent.HarnessAgent;
 import io.agentscope.harness.agent.memory.compaction.CompactionConfig;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -31,23 +30,26 @@ public class AgentScopeHarnessAgentGateway implements HarnessAgentGateway {
     static final String PROMPT_VERSION = "v1";
 
     private final Model model;
-    private final Path workspace;
     private final CompactionConfig compactionConfig;
     private final ArtVerseProperties properties;
     private final MangaAgentToolFactory mangaAgentToolFactory;
+    private final AgentWorkspaceService agentWorkspaceService;
+    private final AgentSessionIdFactory agentSessionIdFactory;
     private final Map<String, HarnessAgent> agentCache = new ConcurrentHashMap<>();
 
     public AgentScopeHarnessAgentGateway(
             Model model,
-            @Qualifier("agentScopeWorkspace") Path workspace,
             CompactionConfig compactionConfig,
             ArtVerseProperties properties,
-            MangaAgentToolFactory mangaAgentToolFactory) {
+            MangaAgentToolFactory mangaAgentToolFactory,
+            AgentWorkspaceService agentWorkspaceService,
+            AgentSessionIdFactory agentSessionIdFactory) {
         this.model = model;
-        this.workspace = workspace;
         this.compactionConfig = compactionConfig;
         this.properties = properties;
         this.mangaAgentToolFactory = mangaAgentToolFactory;
+        this.agentWorkspaceService = agentWorkspaceService;
+        this.agentSessionIdFactory = agentSessionIdFactory;
     }
 
     @Override
@@ -73,11 +75,12 @@ public class AgentScopeHarnessAgentGateway implements HarnessAgentGateway {
     }
 
     private HarnessAgent getOrCreateAgent(AgentRunRequest request) {
-        String agentKey = buildAgentCacheKey(request, defaultModelSpec(request.userApiKey()));
-        return agentCache.computeIfAbsent(agentKey, k -> buildAgent(request));
+        Path requestWorkspace = agentWorkspaceService.workspaceFor(request);
+        String agentKey = buildAgentCacheKey(request, defaultModelSpec(request.userApiKey()), requestWorkspace);
+        return agentCache.computeIfAbsent(agentKey, k -> buildAgent(request, requestWorkspace));
     }
 
-    private HarnessAgent buildAgent(AgentRunRequest request) {
+    private HarnessAgent buildAgent(AgentRunRequest request, Path requestWorkspace) {
         AgentModelSpec modelSpec = request.modelSpec() != null
                 ? request.modelSpec()
                 : defaultModelSpec(request.userApiKey());
@@ -86,7 +89,7 @@ public class AgentScopeHarnessAgentGateway implements HarnessAgentGateway {
                 .name("artverse-story-" + request.storyId())
                 .sysPrompt(systemPromptFor(request.taskType()))
                 .model(effectiveModel)
-                .workspace(workspace)
+                .workspace(requestWorkspace)
                 .compaction(compactionConfig)
                 .build();
         if (request.taskType() == AgentTaskType.MANGA_DIRECTOR) {
@@ -136,6 +139,10 @@ public class AgentScopeHarnessAgentGateway implements HarnessAgentGateway {
     }
 
     static String buildAgentCacheKey(AgentRunRequest request, AgentModelSpec fallbackSpec) {
+        return buildAgentCacheKey(request, fallbackSpec, null);
+    }
+
+    static String buildAgentCacheKey(AgentRunRequest request, AgentModelSpec fallbackSpec, Path workspace) {
         AgentModelSpec spec = request.modelSpec() != null ? request.modelSpec() : fallbackSpec;
         return String.join(":",
                 "user", nullToKey(request.userId()),
@@ -146,7 +153,8 @@ public class AgentScopeHarnessAgentGateway implements HarnessAgentGateway {
                 "model", nullToKey(spec.model()),
                 "baseUrl", AgentModelSpecFactory.shortHash(spec.baseUrl()),
                 "key", nullToKey(spec.apiKeyHash()),
-                "prompt", PROMPT_VERSION
+                "prompt", PROMPT_VERSION,
+                "workspace", workspace == null ? "none" : AgentModelSpecFactory.shortHash(workspace.toAbsolutePath().normalize().toString())
         );
     }
 
@@ -156,8 +164,14 @@ public class AgentScopeHarnessAgentGateway implements HarnessAgentGateway {
 
     private RuntimeContext buildRuntimeContext(AgentRunRequest request) {
         return RuntimeContext.builder()
-                .sessionId("story-" + request.storyId() + "-chapter-" + request.chapterId()
-                        + "-" + request.taskType().name().toLowerCase())
+                .sessionId(agentSessionIdFactory.create(request))
+                .userId(request.userId())
+                .build();
+    }
+
+    static RuntimeContext buildRuntimeContextForTest(AgentRunRequest request, AgentSessionIdFactory factory) {
+        return RuntimeContext.builder()
+                .sessionId(factory.create(request))
                 .userId(request.userId())
                 .build();
     }
