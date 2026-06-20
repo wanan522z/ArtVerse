@@ -1,5 +1,16 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Bot, BookOpenText, Loader2, Send, Sparkles } from 'lucide-react';
+import {
+  Bot,
+  BookOpenText,
+  CheckCircle2,
+  Clock3,
+  Loader2,
+  MessageCircleQuestion,
+  Send,
+  Sparkles,
+  TriangleAlert,
+  Wrench,
+} from 'lucide-react';
 import {
   type AgentRunTimelineEvent,
   type AgentUserInputRequest,
@@ -86,6 +97,197 @@ function createRequestId() {
 
 function requestIdOf(value: { requestId?: string; request_id?: string } | null | undefined) {
   return value?.requestId ?? value?.request_id;
+}
+
+type ExecutionTone = 'neutral' | 'thinking' | 'tool' | 'waiting' | 'success' | 'warning' | 'error';
+
+function formatRequestId(requestId: string | null | undefined): string {
+  if (!requestId) {
+    return '未生成';
+  }
+  return requestId.length <= 18 ? requestId : `${requestId.slice(0, 8)}…${requestId.slice(-6)}`;
+}
+
+function formatTimestamp(value?: string): string {
+  if (!value) return '';
+  try {
+    return new Date(value).toLocaleTimeString('zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  } catch {
+    return value;
+  }
+}
+
+function timelineEventSummary(event: AgentRunTimelineEvent): {
+  tone: ExecutionTone;
+  title: string;
+  detail: string;
+  icon: 'bot' | 'sparkles' | 'wrench' | 'question' | 'check' | 'warning' | 'clock';
+} {
+  if (event.type === 'status') {
+    return {
+      tone: 'neutral',
+      title: event.label || event.phase || '运行状态',
+      detail: event.text || event.data?.message ? String(event.text || event.data?.message) : '智能体正在推进任务',
+      icon: 'clock',
+    };
+  }
+  if (event.type === 'tool') {
+    const tool = String(event.data.tool || 'tool');
+    const saved = event.data.saved === true ? '已保存' : '';
+    const scenesCount = typeof event.data.scenes_count === 'number' ? ` · ${event.data.scenes_count} 页` : '';
+    const suffix = event.data.error ? ` · ${event.data.error}` : `${saved}${scenesCount}`;
+    return {
+      tone: event.data.succeeded === false ? 'error' : 'tool',
+      title: tool,
+      detail: event.data.succeeded === false
+        ? `工具调用失败${suffix ? `：${suffix}` : ''}`
+        : `工具调用完成${suffix}`,
+      icon: event.data.succeeded === false ? 'warning' : 'wrench',
+    };
+  }
+
+  const type = String(event.data?.type || event.type);
+  const label = String(event.data?.label || event.data?.phase || event.data?.toolName || event.type);
+  if (type === 'text_delta') {
+    return {
+      tone: 'neutral',
+      title: '回复生成中',
+      detail: event.data?.text ? String(event.data.text) : '智能体正在拼接最终回复',
+      icon: 'bot',
+    };
+  }
+  if (type === 'run_started') {
+    return {
+      tone: 'thinking',
+      title: label || '智能体已启动',
+      detail: '开始分析当前章节上下文',
+      icon: 'bot',
+    };
+  }
+  if (type === 'context_loading') {
+    return {
+      tone: 'thinking',
+      title: label || '同步章节知识',
+      detail: '正在把故事知识写入工作区',
+      icon: 'sparkles',
+    };
+  }
+  if (type === 'model_started' || type === 'thinking_started') {
+    return {
+      tone: 'thinking',
+      title: label || '模型推理中',
+      detail: '正在推理下一步动作',
+      icon: 'sparkles',
+    };
+  }
+  if (type === 'tool_call_started' || type === 'tool_started' || type === 'tool_call_ready') {
+    return {
+      tone: 'tool',
+      title: label || '工具处理中',
+      detail: '智能体正在调用工具',
+      icon: 'wrench',
+    };
+  }
+  if (type === 'tool_finished') {
+    return {
+      tone: 'tool',
+      title: label || '工具执行完毕',
+      detail: '工具调用已结束，正在整理结果',
+      icon: 'wrench',
+    };
+  }
+  if (type === 'user_answered') {
+    return {
+      tone: 'waiting',
+      title: '已收到用户选择',
+      detail: String(event.data?.answer || '继续默认方案'),
+      icon: 'question',
+    };
+  }
+  if (type === 'reply_ready') {
+    return {
+      tone: 'success',
+      title: label || '最终回复已生成',
+      detail: '智能体已经开始输出结果',
+      icon: 'check',
+    };
+  }
+  if (type === 'run_finished') {
+    return {
+      tone: 'success',
+      title: label || '任务完成',
+      detail: '本次运行已经结束',
+      icon: 'check',
+    };
+  }
+  if (type === 'user_input_requested') {
+    return {
+      tone: 'waiting',
+      title: event.data.question || '需要你做个决定',
+      detail: event.data.reason || `可选项 ${event.data.options?.length || 0} 个`,
+      icon: 'question',
+    };
+  }
+  if (event.type === 'error') {
+    return {
+      tone: 'error',
+      title: '运行失败',
+      detail: String(event.data.detail || event.data.error || '智能体请求失败'),
+      icon: 'warning',
+    };
+  }
+  return {
+    tone: 'neutral',
+    title: label || event.type,
+    detail: '执行事件',
+    icon: 'clock',
+  };
+}
+
+function executionIcon(tone: ExecutionTone, icon: 'bot' | 'sparkles' | 'wrench' | 'question' | 'check' | 'warning' | 'clock') {
+  const className = {
+    neutral: 'text-gray-300',
+    thinking: 'text-amber-200',
+    tool: 'text-cyan-200',
+    waiting: 'text-violet-200',
+    success: 'text-emerald-200',
+    warning: 'text-orange-200',
+    error: 'text-red-200',
+  }[tone];
+  const size = 15;
+  switch (icon) {
+    case 'bot':
+      return <Bot size={size} className={className} />;
+    case 'sparkles':
+      return <Sparkles size={size} className={className} />;
+    case 'wrench':
+      return <Wrench size={size} className={className} />;
+    case 'question':
+      return <MessageCircleQuestion size={size} className={className} />;
+    case 'check':
+      return <CheckCircle2 size={size} className={className} />;
+    case 'warning':
+      return <TriangleAlert size={size} className={className} />;
+    case 'clock':
+    default:
+      return <Clock3 size={size} className={className} />;
+  }
+}
+
+function executionBadgeClass(tone: ExecutionTone): string {
+  return {
+    neutral: 'border-white/10 bg-white/[0.04] text-gray-300',
+    thinking: 'border-amber-300/20 bg-amber-300/[0.08] text-amber-100',
+    tool: 'border-cyan-300/20 bg-cyan-300/[0.08] text-cyan-100',
+    waiting: 'border-violet-300/20 bg-violet-300/[0.08] text-violet-100',
+    success: 'border-emerald-300/20 bg-emerald-300/[0.08] text-emerald-100',
+    warning: 'border-orange-300/20 bg-orange-300/[0.08] text-orange-100',
+    error: 'border-red-300/20 bg-red-300/[0.08] text-red-100',
+  }[tone];
 }
 
 function renderInlineMarkdown(text: string): ReactNode[] {
@@ -235,6 +437,10 @@ export default function MangaAgentPage() {
   const chapterIdRef = useRef('');
   const activeRequestIdRef = useRef<string | null>(null);
   const runPollTimerRef = useRef<number | undefined>(undefined);
+  const latestRunEvent = runEvents.length > 0 ? runEvents[runEvents.length - 1] : null;
+  const latestRunSummary = latestRunEvent ? timelineEventSummary(latestRunEvent) : null;
+  const showExecutionPanel = loading || runEvents.length > 0 || !!userInputRequest || !!draftReply;
+  const visibleRequestId = userInputRequest?.requestId ?? activeRequestIdRef.current;
 
   useEffect(() => {
     chapterIdRef.current = chapterId;
@@ -716,6 +922,60 @@ export default function MangaAgentPage() {
           {error && <div className="mx-4 mt-4 rounded-2xl border border-red-500/30 bg-red-950/40 px-3 py-2 text-sm text-red-200">{error}</div>}
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+            {showExecutionPanel && (
+              <div className="mb-4 border-b border-white/10 bg-white/[0.03] px-1 pb-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${executionBadgeClass(
+                    userInputRequest ? 'waiting' : latestRunSummary?.tone || (loading ? 'thinking' : 'neutral'),
+                  )}`}>
+                    {executionIcon(
+                      userInputRequest ? 'waiting' : latestRunSummary?.tone || (loading ? 'thinking' : 'neutral'),
+                      userInputRequest ? 'question' : latestRunSummary?.icon || (loading ? 'sparkles' : 'clock'),
+                    )}
+                    {userInputRequest ? '等待用户决策' : loading ? '运行中' : '最近执行记录'}
+                  </span>
+                  <span className="inline-flex items-center rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-gray-300">
+                    requestId {formatRequestId(visibleRequestId)}
+                  </span>
+                  {latestRunEvent?.createdAt && (
+                    <span className="text-xs text-gray-500">{formatTimestamp(latestRunEvent.createdAt)}</span>
+                  )}
+                </div>
+                <div className="mt-3 text-sm text-gray-200">{runStatus}</div>
+                {latestRunSummary && (
+                  <div className="mt-3 rounded-2xl border border-white/10 bg-black/15 px-4 py-3">
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5">{executionIcon(latestRunSummary.tone, latestRunSummary.icon)}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-white">{latestRunSummary.title}</div>
+                        <div className="mt-1 text-xs leading-5 text-gray-400">{latestRunSummary.detail}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {runEvents.length > 0 && (
+                  <div className="mt-3 grid gap-2">
+                    {runEvents.slice(-6).map((event, index) => {
+                      const summary = timelineEventSummary(event);
+                      return (
+                        <div key={`${event.type}-${event.createdAt || index}`} className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/15 px-3 py-3">
+                          <div className="mt-0.5">{executionIcon(summary.tone, summary.icon)}</div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-medium text-white">{summary.title}</span>
+                              <span className="text-[11px] uppercase tracking-[0.18em] text-gray-500">{event.type}</span>
+                            </div>
+                            <div className="mt-1 text-xs leading-5 text-gray-400">{summary.detail}</div>
+                          </div>
+                          {event.createdAt && <div className="shrink-0 text-[11px] text-gray-500">{formatTimestamp(event.createdAt)}</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {bootLoading || historyLoading ? (
               <div className="flex h-full items-center justify-center">
                 <Loader2 size={28} className="animate-spin text-amber-300" />
@@ -748,7 +1008,7 @@ export default function MangaAgentPage() {
                     </div>
                   </div>
                 ))}
-                {loading && (
+                {loading && !showExecutionPanel && (
                   <div className="flex justify-start">
                     <div className="max-w-[85%] rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-gray-300">
                       <div className="mb-3 inline-flex items-center gap-2 text-gray-400">

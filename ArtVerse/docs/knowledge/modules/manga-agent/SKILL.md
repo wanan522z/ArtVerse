@@ -40,6 +40,8 @@ For resume, the service requires an existing `WAITING_USER` run, reconstructs a 
 
 `AgentScopeHarnessAgentGateway` creates or reuses a per-user/story/chapter/task/model/workspace agent. For `AgentTaskType.MANGA_DIRECTOR`, it registers `MangaAgentToolFactory.Tools`.
 
+The frontend already consumes the backend SSE contract directly. `MangaAgentPage.tsx` renders an AG-UI-style execution panel from `status`, `run_event`, `tool`, `user_input_requested`, `done`, and `error` events. Keep this panel as the single place that explains what the agent is doing; do not add a second competing progress widget.
+
 ## Tools
 
 - `get_chapter_context`: read-only; returns story, chapter, source excerpt, storyboard scenes, and generated image status.
@@ -55,13 +57,14 @@ After a mutating tool succeeds, failures in the final agent response may degrade
 - `requestId` is the idempotency and resume key. Preserve it across stream retries and resume calls.
 - Only `RUNNING` and `WAITING_USER` are open statuses. Terminal statuses are `SUCCEEDED`, `DEGRADED`, and `FAILED`.
 - Persist non-`text_delta` run events so the frontend can restore an interrupted stream.
+- Frontend run progress should be derived from persisted/streamed events, not from hard-coded timers or generic "running" text alone.
 - Use `ask_user` for blocking decisions instead of plain-text questions.
 - Keep controllers thin. Put workflow behavior in application services.
 - Do not expose internal Guard endpoints from user-facing navigation.
 
 ## Change Checklist
 
-- If API payloads or SSE event names change, update `MangaAgentDtos`, `frontend/src/api.ts`, and `MangaAgentPage.tsx` together.
+- If API payloads or SSE event names change, update `MangaAgentDtos`, `frontend/src/api.ts`, and the execution panel in `MangaAgentPage.tsx` together.
 - If tool return shapes change, update frontend timeline handling and tests around `AgentRunToolStatus`.
 - If run status transitions change, update `MangaAgentRunService` tests and open-run restore behavior.
 - If prompt or workspace knowledge changes, check both `MangaAgentConversationService.buildSystemPrompt` and `AgentWorkspaceSyncService.buildKnowledge`.

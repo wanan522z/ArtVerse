@@ -16,6 +16,8 @@ All endpoints are scoped to `/api/chapters/{chapterId}/manga-agent`.
 
 Frontend types and stream parsing live in `frontend/src/api.ts`. The Manga Agent page restores open runs and consumes persisted events in `frontend/src/components/MangaAgentPage.tsx`.
 
+`MangaAgentPage.tsx` renders an AG-UI-style execution panel from the same stream. It shows the active request id, latest run status, recent event timeline, tool activity, and human-in-the-loop waiting state. The panel is restored from persisted run events after refresh or reconnect.
+
 ## New Stream Run
 
 1. `MangaAgentController.runStream` resolves the current user.
@@ -32,6 +34,7 @@ Frontend types and stream parsing live in `frontend/src/api.ts`. The Manga Agent
 12. `AgentScopeEventMapper` maps AgentScope events into `AgentRunEvent`; text deltas append to the final reply.
 13. `MangaAgentRunEventPublisher` sends SSE events and persists non-text run events.
 14. On success, `MangaAgentRunService.markSucceeded` stores the final reply and `done` is emitted.
+15. The frontend execution panel summarizes the latest events and keeps the user informed while the assistant response is still streaming.
 
 ## Human-In-The-Loop Resume
 
@@ -40,6 +43,8 @@ Frontend types and stream parsing live in `frontend/src/api.ts`. The Manga Agent
 `MangaAgentService` catches `AgentUserInputRequiredException`, marks the run `WAITING_USER`, emits `user_input_requested`, and completes the stream. The frontend displays the options and can call resume.
 
 Resume requires the same `requestId`. `MangaAgentRunService.requireWaitingRun` verifies status. `MangaAgentConversationService.resumeMessage` combines original input, the stored question, and the user's answer into a continuation prompt. The run is marked `RUNNING` and the normal stream flow continues.
+
+When `user_input_requested` is received or restored, the frontend execution panel switches to a waiting state and shows the selectable options. Free-text answers are allowed only when the backend request has `allowFreeText=true`.
 
 ## Persistence Rules
 
