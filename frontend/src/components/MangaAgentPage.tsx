@@ -105,7 +105,7 @@ type ExecutionTone = 'neutral' | 'thinking' | 'tool' | 'waiting' | 'success' | '
 
 function formatRequestId(requestId: string | null | undefined): string {
   if (!requestId) {
-    return '未生成';
+    return '';
   }
   return requestId.length <= 18 ? requestId : `${requestId.slice(0, 8)}…${requestId.slice(-6)}`;
 }
@@ -1143,9 +1143,11 @@ export default function MangaAgentPage() {
                           )}
                           {userInputRequest ? '等待用户决策' : loading ? '运行中' : '最近执行记录'}
                         </span>
-                        <span className="inline-flex items-center rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-gray-300">
-                          requestId {formatRequestId(visibleRequestId)}
-                        </span>
+                        {visibleRequestId && (
+                          <span className="inline-flex items-center rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-gray-300">
+                            requestId {formatRequestId(visibleRequestId)}
+                          </span>
+                        )}
                         {latestRunEvent?.createdAt && (
                           <span className="text-xs text-gray-500">{formatTimestamp(latestRunEvent.createdAt)}</span>
                         )}
