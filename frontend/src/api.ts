@@ -1142,6 +1142,15 @@ export interface MangaAgentMessage {
   createdAt?: string;
 }
 
+export interface MangaAgentConversation {
+  conversationId: string;
+  title: string;
+  status: 'ACTIVE' | 'ARCHIVED';
+  createdAt?: string;
+  updatedAt?: string;
+  archivedAt?: string | null;
+}
+
 export type MangaAgentRunEvent =
   | { type: 'status'; data: { message?: string; requestId?: string; request_id?: string } }
   | { type: 'run_event'; data: AgentRunTimelineEvent }
@@ -1235,6 +1244,31 @@ export async function getMangaAgentMessages(chapterId: number): Promise<MangaAge
   return data.messages || [];
 }
 
+export async function listMangaAgentConversations(chapterId: number): Promise<MangaAgentConversation[]> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/conversations`);
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  const data = await res.json();
+  return data.conversations || [];
+}
+
+export async function createMangaAgentConversation(chapterId: number): Promise<MangaAgentConversation> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/conversations`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  return res.json();
+}
+
+export async function getMangaAgentConversationMessages(
+  chapterId: number,
+  conversationId: string,
+): Promise<MangaAgentMessage[]> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/conversations/${conversationId}/messages`);
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  const data = await res.json();
+  return data.messages || [];
+}
+
 export async function runMangaAgent(chapterId: number, message: string, requestId?: string): Promise<{ reply: string; request_id?: string; requestId?: string }> {
   const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/run`, {
     method: 'POST',
@@ -1307,16 +1341,19 @@ export function runMangaAgentAgUiStream(
   message: string,
   requestId: string | undefined,
   onEvent: (event: MangaAgentRunEvent) => void,
+  conversationId?: string,
 ): AbortController {
   const controller = new AbortController();
   const agent = new ArtVerseMangaAgentHttpAgent(
-    `${BASE}/api/chapters/${chapterId}/manga-agent/ag-ui/run`,
+    conversationId
+      ? `${BASE}/api/chapters/${chapterId}/manga-agent/conversations/${conversationId}/ag-ui/run`
+      : `${BASE}/api/chapters/${chapterId}/manga-agent/ag-ui/run`,
     message,
     requestId,
     controller,
   );
   const subscription = agent.run({
-    threadId: `chapter-${chapterId}`,
+    threadId: conversationId ? `chapter-${chapterId}-conversation-${conversationId}` : `chapter-${chapterId}`,
     runId: requestId || createClientRequestId(),
     state: {},
     messages: [{ id: `user-${requestId || Date.now()}`, role: 'user', content: message }],
@@ -1340,17 +1377,20 @@ export function resumeMangaAgentAgUiStream(
   requestId: string,
   answer: string,
   onEvent: (event: MangaAgentRunEvent) => void,
+  conversationId?: string,
 ): AbortController {
   const controller = new AbortController();
   const agent = new ArtVerseMangaAgentHttpAgent(
-    `${BASE}/api/chapters/${chapterId}/manga-agent/ag-ui/runs/${requestId}/resume`,
+    conversationId
+      ? `${BASE}/api/chapters/${chapterId}/manga-agent/conversations/${conversationId}/ag-ui/runs/${requestId}/resume`
+      : `${BASE}/api/chapters/${chapterId}/manga-agent/ag-ui/runs/${requestId}/resume`,
     '',
     requestId,
     controller,
     answer,
   );
   const subscription = agent.run({
-    threadId: `chapter-${chapterId}`,
+    threadId: conversationId ? `chapter-${chapterId}-conversation-${conversationId}` : `chapter-${chapterId}`,
     runId: requestId,
     state: {},
     messages: [],
@@ -1466,14 +1506,46 @@ export async function getOpenMangaAgentRun(chapterId: number): Promise<MangaAgen
   return data.run || null;
 }
 
+export async function getOpenMangaAgentConversationRun(
+  chapterId: number,
+  conversationId: string,
+): Promise<MangaAgentRunSnapshot | null> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/conversations/${conversationId}/runs/open`);
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  const data = await res.json();
+  return data.run || null;
+}
+
 export async function getMangaAgentRunState(chapterId: number, requestId: string): Promise<MangaAgentRunSnapshot> {
   const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/runs/${requestId}`);
   if (!res.ok) throw new Error(parseApiError(await res.text()));
   return res.json();
 }
 
+export async function getMangaAgentConversationRunState(
+  chapterId: number,
+  conversationId: string,
+  requestId: string,
+): Promise<MangaAgentRunSnapshot> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/conversations/${conversationId}/runs/${requestId}`);
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  return res.json();
+}
+
 export async function cancelMangaAgentRun(chapterId: number, requestId: string): Promise<MangaAgentRunSnapshot> {
   const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/runs/${requestId}/cancel`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error(parseApiError(await res.text()));
+  return res.json();
+}
+
+export async function cancelMangaAgentConversationRun(
+  chapterId: number,
+  conversationId: string,
+  requestId: string,
+): Promise<MangaAgentRunSnapshot> {
+  const res = await authFetch(`${BASE}/api/chapters/${chapterId}/manga-agent/conversations/${conversationId}/runs/${requestId}/cancel`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error(parseApiError(await res.text()));

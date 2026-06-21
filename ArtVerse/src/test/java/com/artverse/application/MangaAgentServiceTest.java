@@ -9,6 +9,8 @@ import com.artverse.common.BusinessException;
 import com.artverse.config.ArtVerseProperties;
 import com.artverse.domain.Chapter;
 import com.artverse.domain.ColorMode;
+import com.artverse.domain.MangaAgentConversation;
+import com.artverse.domain.MangaAgentConversationStatus;
 import com.artverse.domain.MangaAgentMessage;
 import com.artverse.domain.MessageRole;
 import com.artverse.domain.Story;
@@ -111,6 +113,7 @@ class MangaAgentServiceTest {
         GenerationGuardService guard = mock(GenerationGuardService.class);
         MangaAgentRunService runService = mock(MangaAgentRunService.class);
         MangaAgentRunEventPublisher eventPublisher = mock(MangaAgentRunEventPublisher.class);
+        MangaAgentConversationRegistry conversationRegistry = mock(MangaAgentConversationRegistry.class);
         ArtVerseProperties properties = new ArtVerseProperties();
         AgentRunToolStatus toolStatus = new AgentRunToolStatus();
         properties.getAgent().setRunTimeoutSeconds(5);
@@ -120,13 +123,15 @@ class MangaAgentServiceTest {
 
         User user = user(1L);
         Chapter chapter = chapter(user);
+        MangaAgentConversation conversation = conversation(user, chapter);
         List<MangaAgentMessage> saved = new ArrayList<>();
         when(accessService.requireVisible(7L, 1L)).thenReturn(chapter);
+        when(conversationRegistry.activeOrCreate(7L, user)).thenReturn(conversation);
         when(apiKeyService.getDecryptedKey(user, "deepseek")).thenReturn("deepseek-key");
         when(apiKeyService.getDecryptedKey(user, "coze")).thenReturn("coze-key");
-        when(messageRepository.findByUserIdAndChapterIdAndRequestIdAndRole(eq(1L), eq(7L), any(UUID.class), any(MessageRole.class)))
+        when(messageRepository.findByConversationIdAndRequestIdAndRole(eq(99L), any(UUID.class), any(MessageRole.class)))
                 .thenReturn(Optional.empty());
-        when(messageRepository.findByUserIdAndChapterIdOrderByCreatedAtAsc(1L, 7L))
+        when(messageRepository.findByConversationIdOrderByCreatedAtAsc(99L))
                 .thenAnswer(invocation -> List.copyOf(saved));
         when(messageRepository.save(any(MangaAgentMessage.class))).thenAnswer(invocation -> {
             MangaAgentMessage message = invocation.getArgument(0);
@@ -138,6 +143,7 @@ class MangaAgentServiceTest {
                 new MangaAgentConversationService(messageRepository, accessService);
         MangaAgentService service = new MangaAgentService(
                 conversationService,
+                conversationRegistry,
                 gateway,
                 new AgentModelSpecFactory(properties, dotenv),
                 syncService,
@@ -172,6 +178,18 @@ class MangaAgentServiceTest {
         chapter.setColorMode(ColorMode.BW);
         chapter.setImageCount(1);
         return chapter;
+    }
+
+    private static MangaAgentConversation conversation(User user, Chapter chapter) {
+        MangaAgentConversation conversation = new MangaAgentConversation();
+        conversation.setId(99L);
+        conversation.setConversationUuid(UUID.fromString("11111111-1111-1111-1111-111111111111"));
+        conversation.setUser(user);
+        conversation.setStory(chapter.getStory());
+        conversation.setChapter(chapter);
+        conversation.setTitle("测试对话");
+        conversation.setStatus(MangaAgentConversationStatus.ACTIVE);
+        return conversation;
     }
 
     private record Fixture(MangaAgentService service,

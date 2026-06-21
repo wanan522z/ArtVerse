@@ -133,7 +133,8 @@ class AgentScopeHarnessAgentGatewayTest {
                 Map.of(),
                 new AgentModelSpec("deepseek", "https://api.deepseek.com", "deepseek-chat", "key-a"),
                 "secret",
-                requestId
+                requestId,
+                null
         );
 
         AgentRunContext context = AgentScopeHarnessAgentGateway

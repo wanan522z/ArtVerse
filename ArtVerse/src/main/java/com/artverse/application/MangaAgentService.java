@@ -12,6 +12,7 @@ import com.artverse.agents.HarnessAgentGateway;
 import com.artverse.common.BusinessException;
 import com.artverse.config.ArtVerseProperties;
 import com.artverse.domain.Chapter;
+import com.artverse.domain.MangaAgentConversation;
 import com.artverse.domain.MangaAgentMessage;
 import com.artverse.domain.MangaAgentRun;
 import com.artverse.domain.MessageRole;
@@ -41,6 +42,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class MangaAgentService {
 
     private final MangaAgentConversationService mangaAgentConversationService;
+    private final MangaAgentConversationRegistry mangaAgentConversationRegistry;
     private final HarnessAgentGateway harnessAgentGateway;
     private final AgentModelSpecFactory agentModelSpecFactory;
     private final AgentWorkspaceSyncService agentWorkspaceSyncService;
@@ -58,27 +60,61 @@ public class MangaAgentService {
 
     @Transactional(readOnly = true)
     public List<MangaAgentMessage> listMessages(Long chapterId, User user) {
-        return mangaAgentConversationService.listMessages(chapterId, user);
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.activeOrCreate(chapterId, user);
+        return mangaAgentConversationService.listMessages(conversation);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MangaAgentConversation> listConversations(Long chapterId, User user) {
+        return mangaAgentConversationRegistry.list(chapterId, user);
+    }
+
+    public MangaAgentConversation createConversation(Long chapterId, User user) {
+        return mangaAgentConversationRegistry.create(chapterId, user);
+    }
+
+    public MangaAgentConversation archiveConversation(Long chapterId, UUID conversationId, User user) {
+        return mangaAgentConversationRegistry.archive(chapterId, user, conversationId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MangaAgentMessage> listMessages(Long chapterId, UUID conversationId, User user) {
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.require(chapterId, user, conversationId);
+        return mangaAgentConversationService.listMessages(conversation);
     }
 
     public RunResult run(Long chapterId, String message, UUID requestId, User user) {
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.activeOrCreate(chapterId, user);
+        return run(conversation, message, requestId, user);
+    }
+
+    public RunResult run(MangaAgentConversation conversation, String message, UUID requestId, User user) {
         UUID effectiveRequestId = requestId == null ? UUID.randomUUID() : requestId;
-        try (AgentRunToolStatus.RunScope scope = agentRunToolStatus.start(user.getId(), chapterId, effectiveRequestId)) {
-            return runWithToolState(chapterId, message, effectiveRequestId, user, scope.state());
+        try (AgentRunToolStatus.RunScope scope = agentRunToolStatus.start(user.getId(), conversation.getChapter().getId(), effectiveRequestId)) {
+            return runWithToolState(conversation, message, effectiveRequestId, scope.state());
         }
     }
 
     public SseEmitter runStream(Long chapterId, String message, UUID requestId, User user) {
-        return runStreamInternal(chapterId, message, requestId, user, MangaAgentRunEventPublisher.StreamProtocol.LEGACY_AND_AG_UI);
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.activeOrCreate(chapterId, user);
+        return runStreamInternal(conversation, message, requestId, MangaAgentRunEventPublisher.StreamProtocol.LEGACY_AND_AG_UI);
     }
 
     public SseEmitter runAgUiStream(Long chapterId, String message, UUID requestId, User user) {
-        return runStreamInternal(chapterId, message, requestId, user, MangaAgentRunEventPublisher.StreamProtocol.AG_UI_ONLY);
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.activeOrCreate(chapterId, user);
+        return runStreamInternal(conversation, message, requestId, MangaAgentRunEventPublisher.StreamProtocol.AG_UI_ONLY);
     }
 
-    private SseEmitter runStreamInternal(Long chapterId, String message, UUID requestId, User user,
+    public SseEmitter runAgUiStream(Long chapterId, UUID conversationId, String message, UUID requestId, User user) {
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.require(chapterId, user, conversationId);
+        return runStreamInternal(conversation, message, requestId, MangaAgentRunEventPublisher.StreamProtocol.AG_UI_ONLY);
+    }
+
+    private SseEmitter runStreamInternal(MangaAgentConversation conversation, String message, UUID requestId,
                                          MangaAgentRunEventPublisher.StreamProtocol protocol) {
         UUID effectiveRequestId = requestId == null ? UUID.randomUUID() : requestId;
+        User user = conversation.getUser();
+        Long chapterId = conversation.getChapter().getId();
         SseEmitter emitter = new SseEmitter(0L);
         MangaAgentRunEventPublisher.RunEventSink sink = sinkFor(emitter, protocol);
         AtomicReference<MangaAgentRun> runRef = new AtomicReference<>();
@@ -90,18 +126,18 @@ public class MangaAgentService {
                     effectiveRequestId,
                     event -> sink.sendToolEvent(runRef.get(), event)
             )) {
-                runStreamLeader(chapterId, message, effectiveRequestId, user, ignored.state(), sink, runRef);
+                runStreamLeader(conversation, message, effectiveRequestId, ignored.state(), sink, runRef);
             } catch (AgentUserInputRequiredException e) {
                 MangaAgentRun run = runRef.get();
                 if (run != null) {
-                    mangaAgentRunService.markWaiting(effectiveRequestId, user.getId(), chapterId, e.request());
+                    mangaAgentRunService.markWaiting(conversation, effectiveRequestId, e.request());
                 }
                 sink.sendUserInputRequested(run, effectiveRequestId, e.request());
             } catch (Exception e) {
                 String detail = e.getMessage() == null ? "Agent request failed" : e.getMessage();
                 MangaAgentRun run = runRef.get();
-                if (run != null && !mangaAgentRunService.isTerminal(effectiveRequestId, user.getId(), chapterId)) {
-                    mangaAgentRunService.markFailed(effectiveRequestId, user.getId(), chapterId, detail);
+                if (run != null && !mangaAgentRunService.isTerminal(conversation, effectiveRequestId)) {
+                    mangaAgentRunService.markFailed(conversation, effectiveRequestId, detail);
                 }
                 sink.sendError(run, effectiveRequestId, detail);
             }
@@ -111,23 +147,32 @@ public class MangaAgentService {
     }
 
     public SseEmitter resumeStream(Long chapterId, UUID requestId, String answer, User user) {
-        return resumeStreamInternal(chapterId, requestId, answer, user, MangaAgentRunEventPublisher.StreamProtocol.LEGACY_AND_AG_UI);
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.activeOrCreate(chapterId, user);
+        return resumeStreamInternal(conversation, requestId, answer, MangaAgentRunEventPublisher.StreamProtocol.LEGACY_AND_AG_UI);
     }
 
     public SseEmitter resumeAgUiStream(Long chapterId, UUID requestId, String answer, User user) {
-        return resumeStreamInternal(chapterId, requestId, answer, user, MangaAgentRunEventPublisher.StreamProtocol.AG_UI_ONLY);
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.activeOrCreate(chapterId, user);
+        return resumeStreamInternal(conversation, requestId, answer, MangaAgentRunEventPublisher.StreamProtocol.AG_UI_ONLY);
     }
 
-    private SseEmitter resumeStreamInternal(Long chapterId, UUID requestId, String answer, User user,
+    public SseEmitter resumeAgUiStream(Long chapterId, UUID conversationId, UUID requestId, String answer, User user) {
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.require(chapterId, user, conversationId);
+        return resumeStreamInternal(conversation, requestId, answer, MangaAgentRunEventPublisher.StreamProtocol.AG_UI_ONLY);
+    }
+
+    private SseEmitter resumeStreamInternal(MangaAgentConversation conversation, UUID requestId, String answer,
                                             MangaAgentRunEventPublisher.StreamProtocol protocol) {
         if (requestId == null) {
             throw new BusinessException(400, "requestId is required");
         }
-        MangaAgentRun waitingRun = mangaAgentRunService.requireWaitingRun(user.getId(), chapterId, requestId);
+        User user = conversation.getUser();
+        Long chapterId = conversation.getChapter().getId();
+        MangaAgentRun waitingRun = mangaAgentRunService.requireWaitingRun(conversation, requestId);
         AgentUserInputRequest waiting = mangaAgentRunService.waitingInput(waitingRun);
         String message = mangaAgentConversationService.resumeMessage(waitingRun.getInputMessage(), waiting, answer);
         agentRunToolStatus.clearWaitingInput(user.getId(), chapterId, requestId);
-        mangaAgentRunService.markRunning(requestId, user.getId(), chapterId);
+        mangaAgentRunService.markRunning(conversation, requestId);
 
         SseEmitter emitter = new SseEmitter(0L);
         MangaAgentRunEventPublisher.RunEventSink sink = sinkFor(emitter, protocol);
@@ -140,18 +185,18 @@ public class MangaAgentService {
                     event -> sink.sendToolEvent(runRef.get(), event)
             )) {
                 sink.sendUserAnswerEvent(waitingRun, requestId, answer);
-                runStreamLeader(chapterId, message, requestId, user, ignored.state(), sink, runRef);
+                runStreamLeader(conversation, message, requestId, ignored.state(), sink, runRef);
             } catch (AgentUserInputRequiredException e) {
                 MangaAgentRun run = runRef.get();
                 if (run != null) {
-                    mangaAgentRunService.markWaiting(requestId, user.getId(), chapterId, e.request());
+                    mangaAgentRunService.markWaiting(conversation, requestId, e.request());
                 }
                 sink.sendUserInputRequested(run, requestId, e.request());
             } catch (Exception e) {
                 String detail = e.getMessage() == null ? "Agent request failed" : e.getMessage();
                 MangaAgentRun run = runRef.get();
-                if (run != null && !mangaAgentRunService.isTerminal(requestId, user.getId(), chapterId)) {
-                    mangaAgentRunService.markFailed(requestId, user.getId(), chapterId, detail);
+                if (run != null && !mangaAgentRunService.isTerminal(conversation, requestId)) {
+                    mangaAgentRunService.markFailed(conversation, requestId, detail);
                 }
                 sink.sendError(run, requestId, detail);
             }
@@ -160,20 +205,27 @@ public class MangaAgentService {
     }
 
     public RunResult resume(Long chapterId, UUID requestId, String answer, User user) {
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.activeOrCreate(chapterId, user);
+        return resume(conversation, requestId, answer);
+    }
+
+    public RunResult resume(MangaAgentConversation conversation, UUID requestId, String answer) {
         if (requestId == null) {
             throw new BusinessException(400, "requestId is required");
         }
-        MangaAgentRun waitingRun = mangaAgentRunService.requireWaitingRun(user.getId(), chapterId, requestId);
+        User user = conversation.getUser();
+        Long chapterId = conversation.getChapter().getId();
+        MangaAgentRun waitingRun = mangaAgentRunService.requireWaitingRun(conversation, requestId);
         AgentUserInputRequest waiting = mangaAgentRunService.waitingInput(waitingRun);
         agentRunToolStatus.clearWaitingInput(user.getId(), chapterId, requestId);
-        mangaAgentRunService.markRunning(requestId, user.getId(), chapterId);
+        mangaAgentRunService.markRunning(conversation, requestId);
         String message = mangaAgentConversationService.resumeMessage(waitingRun.getInputMessage(), waiting, answer);
         try {
-            RunResult result = run(chapterId, message, requestId, user);
-            mangaAgentRunService.markSucceeded(requestId, user.getId(), chapterId, result.reply());
+            RunResult result = run(conversation, message, requestId, user);
+            mangaAgentRunService.markSucceeded(conversation, requestId, result.reply());
             return result;
         } catch (Exception e) {
-            mangaAgentRunService.markFailed(requestId, user.getId(), chapterId,
+            mangaAgentRunService.markFailed(conversation, requestId,
                     e.getMessage() == null ? "智能体请求失败" : e.getMessage());
             throw e;
         }
@@ -182,7 +234,15 @@ public class MangaAgentService {
     public Optional<MangaAgentRunService.RunSnapshot> latestOpenRun(Long chapterId, User user) {
         chapterAccessService.requireVisible(chapterId, user.getId());
         interruptStaleRunningRuns();
-        return mangaAgentRunService.findLatestOpenRun(user.getId(), chapterId)
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.activeOrCreate(chapterId, user);
+        return mangaAgentRunService.findLatestOpenRun(conversation)
+                .map(mangaAgentRunService::snapshot);
+    }
+
+    public Optional<MangaAgentRunService.RunSnapshot> latestOpenRun(Long chapterId, UUID conversationId, User user) {
+        interruptStaleRunningRuns();
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.require(chapterId, user, conversationId);
+        return mangaAgentRunService.findLatestOpenRun(conversation)
                 .map(mangaAgentRunService::snapshot);
     }
 
@@ -192,7 +252,19 @@ public class MangaAgentService {
         }
         chapterAccessService.requireVisible(chapterId, user.getId());
         interruptStaleRunningRuns();
-        return mangaAgentRunService.findRun(user.getId(), chapterId, requestId)
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.activeOrCreate(chapterId, user);
+        return mangaAgentRunService.findRun(conversation, requestId)
+                .map(mangaAgentRunService::snapshot)
+                .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
+    }
+
+    public MangaAgentRunService.RunSnapshot getRun(Long chapterId, UUID conversationId, UUID requestId, User user) {
+        if (requestId == null) {
+            throw new BusinessException(400, "requestId is required");
+        }
+        interruptStaleRunningRuns();
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.require(chapterId, user, conversationId);
+        return mangaAgentRunService.findRun(conversation, requestId)
                 .map(mangaAgentRunService::snapshot)
                 .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
     }
@@ -202,22 +274,35 @@ public class MangaAgentService {
             throw new BusinessException(400, "requestId is required");
         }
         chapterAccessService.requireVisible(chapterId, user.getId());
-        MangaAgentRun run = mangaAgentRunService.cancel(requestId, user.getId(), chapterId, "Agent run cancelled by user");
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.activeOrCreate(chapterId, user);
+        MangaAgentRun run = mangaAgentRunService.cancel(conversation, requestId, "Agent run cancelled by user");
         agentRunToolStatus.clearWaitingInput(user.getId(), chapterId, requestId);
         return mangaAgentRunService.snapshot(run);
     }
 
-    private RunResult runWithToolState(Long chapterId, String message, UUID effectiveRequestId, User user,
+    public MangaAgentRunService.RunSnapshot cancelRun(Long chapterId, UUID conversationId, UUID requestId, User user) {
+        if (requestId == null) {
+            throw new BusinessException(400, "requestId is required");
+        }
+        MangaAgentConversation conversation = mangaAgentConversationRegistry.require(chapterId, user, conversationId);
+        MangaAgentRun run = mangaAgentRunService.cancel(conversation, requestId, "Agent run cancelled by user");
+        agentRunToolStatus.clearWaitingInput(user.getId(), chapterId, requestId);
+        return mangaAgentRunService.snapshot(run);
+    }
+
+    private RunResult runWithToolState(MangaAgentConversation conversation, String message, UUID effectiveRequestId,
                                        AgentRunToolStatus.RunState toolState) {
         if (message == null || message.isBlank()) {
             throw new BusinessException(400, "Message cannot be empty");
         }
 
-        var cached = mangaAgentConversationService.findAssistantReply(user.getId(), chapterId, effectiveRequestId);
+        var cached = mangaAgentConversationService.findAssistantReply(conversation, effectiveRequestId);
         if (cached.isPresent()) {
             return new RunResult(cached.get().getContent(), effectiveRequestId);
         }
 
+        User user = conversation.getUser();
+        Long chapterId = conversation.getChapter().getId();
         String deepseekApiKey = requireDeepseekApiKey(user);
         AgentModelSpec modelSpec = agentModelSpecFactory.deepSeek(deepseekApiKey);
         Map<String, Object> result = generationGuardService.executeMangaAgentRun(
@@ -228,26 +313,28 @@ public class MangaAgentService {
                 modelSpec.provider(),
                 modelSpec.model(),
                 AgentModelSpecFactory.shortHash(modelSpec.baseUrl()),
-                () -> runLeader(chapterId, message, effectiveRequestId, user, deepseekApiKey, modelSpec, toolState)
+                () -> runLeader(conversation, message, effectiveRequestId, deepseekApiKey, modelSpec, toolState)
         );
         return new RunResult(String.valueOf(result.getOrDefault("reply", "")), effectiveRequestId);
     }
 
-    private void runStreamLeader(Long chapterId, String message, UUID effectiveRequestId, User user,
+    private void runStreamLeader(MangaAgentConversation conversation, String message, UUID effectiveRequestId,
                                  AgentRunToolStatus.RunState toolState, MangaAgentRunEventPublisher.RunEventSink sink,
                                  AtomicReference<MangaAgentRun> runRef) {
         if (message == null || message.isBlank()) {
             throw new BusinessException(400, "Message cannot be empty");
         }
 
-        Chapter chapter = chapterAccessService.requireVisible(chapterId, user.getId());
-        MangaAgentRun run = mangaAgentRunService.startOrReuse(user, chapter, effectiveRequestId, message);
+        User user = conversation.getUser();
+        Chapter chapter = conversation.getChapter();
+        Long chapterId = chapter.getId();
+        MangaAgentRun run = mangaAgentRunService.startOrReuse(conversation, effectiveRequestId, message);
         runRef.set(run);
         sink.sendStatus(run, "智能体开始处理当前章节", effectiveRequestId);
 
-        if (mangaAgentConversationService.findAssistantReply(user.getId(), chapterId, effectiveRequestId).isPresent()) {
-            RunResult result = runWithToolState(chapterId, message, effectiveRequestId, user, toolState);
-            mangaAgentRunService.markSucceeded(effectiveRequestId, user.getId(), chapterId, result.reply());
+        if (mangaAgentConversationService.findAssistantReply(conversation, effectiveRequestId).isPresent()) {
+            RunResult result = runWithToolState(conversation, message, effectiveRequestId, toolState);
+            mangaAgentRunService.markSucceeded(conversation, effectiveRequestId, result.reply());
             sink.sendDone(run, result.reply(), result.requestId());
             return;
         }
@@ -263,13 +350,13 @@ public class MangaAgentService {
                 modelSpec.model(),
                 AgentModelSpecFactory.shortHash(modelSpec.baseUrl()),
                 () -> {
-                    List<AgentMessage> messages = prepareAgentMessages(chapter, user, message, effectiveRequestId);
+                    List<AgentMessage> messages = prepareAgentMessages(conversation, message, effectiveRequestId);
                     sink.sendRunEvent(
                             run,
                             AgentRunEvent.of("context_loading", "context", "正在同步故事知识")
                     );
                     agentWorkspaceSyncService.syncMangaDirectorKnowledge(chapterId, String.valueOf(user.getId()));
-                    AgentRunRequest request = buildRunRequest(chapter, user, messages, modelSpec, deepseekApiKey, effectiveRequestId);
+                    AgentRunRequest request = buildRunRequest(conversation, messages, modelSpec, deepseekApiKey, effectiveRequestId);
                     return executeStreamedRequest(run, sink, toolState, request, chapter, user, effectiveRequestId);
                 }
         );
@@ -277,21 +364,23 @@ public class MangaAgentService {
         completeRun(run, sink, chapterId, user, effectiveRequestId, result);
     }
 
-    private Map<String, Object> runLeader(Long chapterId, String message, UUID effectiveRequestId, User user,
+    private Map<String, Object> runLeader(MangaAgentConversation conversation, String message, UUID effectiveRequestId,
                                           String deepseekApiKey, AgentModelSpec modelSpec,
                                           AgentRunToolStatus.RunState toolState) {
-        Chapter chapter = chapterAccessService.requireVisible(chapterId, user.getId());
-        List<AgentMessage> messages = prepareAgentMessages(chapter, user, message, effectiveRequestId);
+        Chapter chapter = conversation.getChapter();
+        User user = conversation.getUser();
+        Long chapterId = chapter.getId();
+        List<AgentMessage> messages = prepareAgentMessages(conversation, message, effectiveRequestId);
         agentWorkspaceSyncService.syncMangaDirectorKnowledge(chapterId, String.valueOf(user.getId()));
 
-        AgentRunRequest request = buildRunRequest(chapter, user, messages, modelSpec, deepseekApiKey, effectiveRequestId);
+        AgentRunRequest request = buildRunRequest(conversation, messages, modelSpec, deepseekApiKey, effectiveRequestId);
         try {
             String reply = harnessAgentGateway.generateText(request).block(agentRunTimeout());
             throwIfWaitingForUser(toolState);
             if (reply == null || reply.isBlank()) {
                 throw new BusinessException(502, "Agent returned empty response");
             }
-            mangaAgentConversationService.saveMessage(user, chapter, MessageRole.ASSISTANT, reply, effectiveRequestId);
+            mangaAgentConversationService.saveMessage(conversation, MessageRole.ASSISTANT, reply, effectiveRequestId);
             return Map.of("reply", reply);
         } catch (AgentUserInputRequiredException e) {
             throw e;
@@ -301,17 +390,17 @@ public class MangaAgentService {
         } catch (BusinessException e) {
             if (toolState.hasSuccessfulMutatingTool()) {
                 return mangaAgentConversationService.fallbackAfterToolSuccess(
-                        user, chapter, effectiveRequestId, toolState, e.getMessage());
+                        conversation, effectiveRequestId, toolState, e.getMessage());
             }
-            mangaAgentConversationService.saveFailureMessage(user, chapter, e.getMessage(), effectiveRequestId);
+            mangaAgentConversationService.saveFailureMessage(conversation, e.getMessage(), effectiveRequestId);
             throw e;
         } catch (Exception e) {
             String error = e.getMessage() == null ? "unknown error" : e.getMessage();
             if (toolState.hasSuccessfulMutatingTool()) {
                 return mangaAgentConversationService.fallbackAfterToolSuccess(
-                        user, chapter, effectiveRequestId, toolState, error);
+                        conversation, effectiveRequestId, toolState, error);
             }
-            mangaAgentConversationService.saveFailureMessage(user, chapter, error, effectiveRequestId);
+            mangaAgentConversationService.saveFailureMessage(conversation, error, effectiveRequestId);
             throw new BusinessException(502, "Agent service failed: " + error);
         }
     }
@@ -348,9 +437,9 @@ public class MangaAgentService {
             }
             String error = e.getMessage() == null ? "unknown error" : e.getMessage();
             if (toolState.hasSuccessfulMutatingTool()) {
-                return mangaAgentConversationService.fallbackAfterToolSuccess(user, chapter, requestId, toolState, error);
+                return mangaAgentConversationService.fallbackAfterToolSuccess(run.getConversation(), requestId, toolState, error);
             }
-            mangaAgentConversationService.saveFailureMessage(user, chapter, error, requestId);
+            mangaAgentConversationService.saveFailureMessage(run.getConversation(), error, requestId);
             throw new BusinessException(502, "Agent service failed: " + error);
         }
 
@@ -361,12 +450,12 @@ public class MangaAgentService {
         if (!finished.get() || finalReply.isBlank()) {
             if (toolState.hasSuccessfulMutatingTool()) {
                 return mangaAgentConversationService.fallbackAfterToolSuccess(
-                        user, chapter, requestId, toolState, "Agent returned empty response");
+                        run.getConversation(), requestId, toolState, "Agent returned empty response");
             }
             throw new BusinessException(502, "Agent returned empty response");
         }
 
-        mangaAgentConversationService.saveMessage(user, chapter, MessageRole.ASSISTANT, finalReply, requestId);
+        mangaAgentConversationService.saveMessage(run.getConversation(), MessageRole.ASSISTANT, finalReply, requestId);
         return Map.of("reply", finalReply);
     }
 
@@ -378,22 +467,30 @@ public class MangaAgentService {
         }
         String reply = String.valueOf(result.getOrDefault("reply", ""));
         if (Boolean.TRUE.equals(result.get("agent_final_response_degraded"))) {
-            mangaAgentRunService.markDegraded(requestId, user.getId(), chapterId, reply,
+            mangaAgentRunService.markDegraded(run.getConversation(), requestId, reply,
                     "Agent final response degraded after tool success");
         } else {
-            mangaAgentRunService.markSucceeded(requestId, user.getId(), chapterId, reply);
+            mangaAgentRunService.markSucceeded(run.getConversation(), requestId, reply);
         }
         sink.sendDone(run, reply, requestId);
     }
 
-    private List<AgentMessage> prepareAgentMessages(Chapter chapter, User user, String message, UUID requestId) {
-        mangaAgentConversationService.saveMessage(user, chapter, MessageRole.USER, message, requestId);
-        List<MangaAgentMessage> history = mangaAgentConversationService.listMessages(chapter.getId(), user);
-        return mangaAgentConversationService.buildMessages(chapter, user, history, message, requestId);
+    private List<AgentMessage> prepareAgentMessages(MangaAgentConversation conversation, String message, UUID requestId) {
+        mangaAgentConversationService.saveMessage(conversation, MessageRole.USER, message, requestId);
+        List<MangaAgentMessage> history = mangaAgentConversationService.listMessages(conversation);
+        return mangaAgentConversationService.buildMessages(
+                conversation.getChapter(),
+                conversation.getUser(),
+                history,
+                message,
+                requestId
+        );
     }
 
-    private AgentRunRequest buildRunRequest(Chapter chapter, User user, List<AgentMessage> messages,
+    private AgentRunRequest buildRunRequest(MangaAgentConversation conversation, List<AgentMessage> messages,
                                             AgentModelSpec modelSpec, String deepseekApiKey, UUID requestId) {
+        User user = conversation.getUser();
+        Chapter chapter = conversation.getChapter();
         return new AgentRunRequest(
                 String.valueOf(user.getId()),
                 chapter.getStory().getId(),
@@ -403,7 +500,8 @@ public class MangaAgentService {
                 Map.of("coze_api_key", nullToBlank(apiKeyService.getDecryptedKey(user, "coze"))),
                 modelSpec,
                 deepseekApiKey,
-                requestId
+                requestId,
+                conversation.getConversationUuid()
         );
     }
 

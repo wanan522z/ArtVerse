@@ -17,9 +17,17 @@ public interface MangaAgentRunRepository extends JpaRepository<MangaAgentRun, Lo
 
     Optional<MangaAgentRun> findByUserIdAndChapterIdAndRequestId(Long userId, Long chapterId, UUID requestId);
 
+    Optional<MangaAgentRun> findByConversationIdAndRequestId(Long conversationId, UUID requestId);
+
     List<MangaAgentRun> findByUserIdAndChapterIdAndStatusInOrderByUpdatedAtDesc(
             Long userId,
             Long chapterId,
+            Collection<MangaAgentRunStatus> statuses,
+            Pageable pageable
+    );
+
+    List<MangaAgentRun> findByConversationIdAndStatusInOrderByUpdatedAtDesc(
+            Long conversationId,
             Collection<MangaAgentRunStatus> statuses,
             Pageable pageable
     );

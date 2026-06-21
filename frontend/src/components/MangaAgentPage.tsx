@@ -6,6 +6,7 @@ import {
   Clock3,
   Loader2,
   MessageCircleQuestion,
+  Plus,
   Send,
   Sparkles,
   Square,
@@ -15,10 +16,14 @@ import {
 import {
   type AgentRunTimelineEvent,
   type AgentUserInputRequest,
-  cancelMangaAgentRun,
+  cancelMangaAgentConversationRun,
+  createMangaAgentConversation,
   getMangaAgentRunState,
+  getMangaAgentConversationRunState,
   getMangaAgentMessages,
-  getOpenMangaAgentRun,
+  getMangaAgentConversationMessages,
+  getOpenMangaAgentConversationRun,
+  listMangaAgentConversations,
   listChapters,
   listStories,
   runMangaAgentAgUiStream,
@@ -430,6 +435,7 @@ export default function MangaAgentPage() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [storyId, setStoryId] = useState('');
   const [chapterId, setChapterId] = useState('');
+  const [conversationId, setConversationId] = useState('');
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -443,6 +449,7 @@ export default function MangaAgentPage() {
   const [userInputRequest, setUserInputRequest] = useState<AgentUserInputRequest | null>(null);
   const [customAnswer, setCustomAnswer] = useState('');
   const chapterIdRef = useRef('');
+  const conversationIdRef = useRef('');
   const activeRequestIdRef = useRef<string | null>(null);
   const runPollTimerRef = useRef<number | undefined>(undefined);
   const activeStreamControllerRef = useRef<AbortController | null>(null);
@@ -456,6 +463,10 @@ export default function MangaAgentPage() {
   useEffect(() => {
     chapterIdRef.current = chapterId;
   }, [chapterId]);
+
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   useEffect(() => {
     draftReplyRef.current = draftReply;
@@ -534,6 +545,7 @@ export default function MangaAgentPage() {
       setDraftReply('');
       setUserInputRequest(null);
       setCustomAnswer('');
+      setConversationId('');
       activeRequestIdRef.current = null;
       if (runPollTimerRef.current !== undefined) {
         window.clearTimeout(runPollTimerRef.current);
@@ -544,12 +556,18 @@ export default function MangaAgentPage() {
       }
       setHistoryLoading(true);
       try {
-        const list = await getMangaAgentMessages(Number(chapterId));
+        const id = Number(chapterId);
+        const conversations = await listMangaAgentConversations(id);
+        const activeConversation = conversations.find((item) => item.status === 'ACTIVE')
+          || await createMangaAgentConversation(id);
+        if (!active) return;
+        setConversationId(activeConversation.conversationId);
+        const list = await getMangaAgentConversationMessages(id, activeConversation.conversationId);
         if (!active) return;
         setMessages(toMessages(list));
-        const openRun = await getOpenMangaAgentRun(Number(chapterId));
+        const openRun = await getOpenMangaAgentConversationRun(id, activeConversation.conversationId);
         if (!active || !openRun) return;
-        restoreRunSnapshot(openRun, chapterId);
+        restoreRunSnapshot(openRun, chapterId, activeConversation.conversationId);
       } catch (err: any) {
         if (active) setError(err.message || '加载对话记录失败');
       } finally {
@@ -569,9 +587,11 @@ export default function MangaAgentPage() {
     }
   };
 
-  const reloadMessages = async (id: number, requestChapterId: string) => {
-    const list = await getMangaAgentMessages(id);
-    if (chapterIdRef.current === requestChapterId) {
+  const reloadMessages = async (id: number, requestChapterId: string, requestConversationId: string) => {
+    const list = requestConversationId
+      ? await getMangaAgentConversationMessages(id, requestConversationId)
+      : await getMangaAgentMessages(id);
+    if (chapterIdRef.current === requestChapterId && conversationIdRef.current === requestConversationId) {
       setMessages(toMessages(list));
     }
   };
@@ -747,7 +767,11 @@ export default function MangaAgentPage() {
     return null;
   };
 
-  const restoreRunSnapshot = (snapshot: MangaAgentRunSnapshot, requestChapterId: string) => {
+  const restoreRunSnapshot = (
+    snapshot: MangaAgentRunSnapshot,
+    requestChapterId: string,
+    requestConversationId: string,
+  ) => {
     const requestId = requestIdOf(snapshot) ?? snapshot.requestId;
     activeRequestIdRef.current = requestId;
     setRunEvents([]);
@@ -777,7 +801,7 @@ export default function MangaAgentPage() {
       if (!snapshot.events || snapshot.events.length === 0) {
         setRunStatus('智能体仍在处理当前章节...');
       }
-      scheduleRunPoll(Number(requestChapterId), requestId, requestChapterId);
+      scheduleRunPoll(Number(requestChapterId), requestId, requestChapterId, requestConversationId);
       return;
     }
 
@@ -793,20 +817,29 @@ export default function MangaAgentPage() {
     } else if (snapshot.status === 'INTERRUPTED') {
       setRunStatus(snapshot.errorMessage || '本次运行已中断，可以重新发起任务');
     }
-    void reloadMessages(Number(requestChapterId), requestChapterId);
+    void reloadMessages(Number(requestChapterId), requestChapterId, requestConversationId);
   };
 
-  const scheduleRunPoll = (id: number, requestId: string, requestChapterId: string) => {
+  const scheduleRunPoll = (
+    id: number,
+    requestId: string,
+    requestChapterId: string,
+    requestConversationId: string,
+  ) => {
     clearRunPoll();
     runPollTimerRef.current = window.setTimeout(async () => {
-      if (chapterIdRef.current !== requestChapterId || activeRequestIdRef.current !== requestId) return;
+      if (chapterIdRef.current !== requestChapterId
+        || conversationIdRef.current !== requestConversationId
+        || activeRequestIdRef.current !== requestId) return;
       try {
-        const snapshot = await getMangaAgentRunState(id, requestId);
-        if (chapterIdRef.current === requestChapterId) {
-          restoreRunSnapshot(snapshot, requestChapterId);
+        const snapshot = requestConversationId
+          ? await getMangaAgentConversationRunState(id, requestConversationId, requestId)
+          : await getMangaAgentRunState(id, requestId);
+        if (chapterIdRef.current === requestChapterId && conversationIdRef.current === requestConversationId) {
+          restoreRunSnapshot(snapshot, requestChapterId, requestConversationId);
         }
       } catch (err: any) {
-        if (chapterIdRef.current === requestChapterId) {
+        if (chapterIdRef.current === requestChapterId && conversationIdRef.current === requestConversationId) {
           setError(err.message || '同步智能体状态失败');
           setLoading(false);
         }
@@ -816,9 +849,10 @@ export default function MangaAgentPage() {
 
   const send = async (override?: string) => {
     const requestChapterId = chapterId;
+    const requestConversationId = conversationId;
     const id = Number(requestChapterId);
     const text = (override ?? input).trim();
-    if (!id || !text || loading) return;
+    if (!id || !requestConversationId || !text || loading) return;
 
     const requestId = createRequestId();
     setLoading(true);
@@ -833,22 +867,25 @@ export default function MangaAgentPage() {
     activeRequestIdRef.current = requestId;
 
     try {
-      const result = await runMangaAgentWithStream(id, text, requestId, requestChapterId);
-      if (chapterIdRef.current === requestChapterId && !result.waiting && result.reply.trim()) {
+      const result = await runMangaAgentWithStream(id, requestConversationId, text, requestId, requestChapterId);
+      if (chapterIdRef.current === requestChapterId
+        && conversationIdRef.current === requestConversationId
+        && !result.waiting
+        && result.reply.trim()) {
         setMessages((prev) => [
           ...prev,
           { role: 'assistant', content: result.reply, requestId: result.requestId ?? result.request_id ?? requestId },
         ]);
       }
-      if (chapterIdRef.current === requestChapterId && !result.waiting) {
-        await reloadMessages(id, requestChapterId);
+      if (chapterIdRef.current === requestChapterId && conversationIdRef.current === requestConversationId && !result.waiting) {
+        await reloadMessages(id, requestChapterId, requestConversationId);
       }
     } catch (err: any) {
-      if (chapterIdRef.current !== requestChapterId) return;
+      if (chapterIdRef.current !== requestChapterId || conversationIdRef.current !== requestConversationId) return;
       setError(err.message || '请求失败');
       try {
-        const list = await getMangaAgentMessages(id);
-        if (chapterIdRef.current === requestChapterId) {
+        const list = await getMangaAgentConversationMessages(id, requestConversationId);
+        if (chapterIdRef.current === requestChapterId && conversationIdRef.current === requestConversationId) {
           setMessages(toMessages(list));
         }
       } catch {
@@ -863,6 +900,7 @@ export default function MangaAgentPage() {
 
   const runMangaAgentWithStream = (
     id: number,
+    requestConversationId: string,
     text: string,
     requestId: string,
     requestChapterId: string,
@@ -871,12 +909,14 @@ export default function MangaAgentPage() {
       id,
       requestId,
       requestChapterId,
-      (onEvent) => runMangaAgentAgUiStream(id, text, requestId, onEvent),
+      requestConversationId,
+      (onEvent) => runMangaAgentAgUiStream(id, text, requestId, onEvent, requestConversationId),
     );
   };
 
   const resumeMangaAgentWithStream = (
     id: number,
+    requestConversationId: string,
     requestId: string,
     answer: string,
     requestChapterId: string,
@@ -885,7 +925,8 @@ export default function MangaAgentPage() {
       id,
       requestId,
       requestChapterId,
-      (onEvent) => resumeMangaAgentAgUiStream(id, requestId, answer, onEvent),
+      requestConversationId,
+      (onEvent) => resumeMangaAgentAgUiStream(id, requestId, answer, onEvent, requestConversationId),
     );
   };
 
@@ -893,13 +934,14 @@ export default function MangaAgentPage() {
     id: number,
     requestId: string,
     requestChapterId: string,
+    requestConversationId: string,
     startStream: (onEvent: (event: MangaAgentRunEvent) => void) => AbortController,
   ): Promise<AgentStreamResult> => {
     return new Promise((resolve, reject) => {
       let settled = false;
       let controller: AbortController | null = null;
       controller = startStream((event: MangaAgentRunEvent) => {
-        if (chapterIdRef.current !== requestChapterId || settled) return;
+        if (chapterIdRef.current !== requestChapterId || conversationIdRef.current !== requestConversationId || settled) return;
         const outcome = applyMangaAgentEvent(event, requestId);
         if (!outcome) return;
         settled = true;
@@ -920,8 +962,8 @@ export default function MangaAgentPage() {
         controller?.abort();
         setRunStatus('连接等待较久，正在同步后台运行状态...');
         try {
-          const snapshot = await getMangaAgentRunState(id, requestId);
-          restoreRunSnapshot(snapshot, requestChapterId);
+          const snapshot = await getMangaAgentConversationRunState(id, requestConversationId, requestId);
+          restoreRunSnapshot(snapshot, requestChapterId, requestConversationId);
           if (snapshot.status === 'WAITING_USER') {
             settled = true;
             resolve({ reply: '', requestId, waiting: true });
@@ -949,15 +991,16 @@ export default function MangaAgentPage() {
 
   const cancelActiveRun = async () => {
     const id = Number(chapterId);
+    const requestConversationId = conversationId;
     const requestId = activeRequestIdRef.current;
-    if (!id || !requestId) return;
+    if (!id || !requestConversationId || !requestId) return;
     setError('');
     setRunStatus('正在停止本次运行...');
     try {
-      const snapshot = await cancelMangaAgentRun(id, requestId);
+      const snapshot = await cancelMangaAgentConversationRun(id, requestConversationId, requestId);
       activeStreamControllerRef.current?.abort();
       activeStreamControllerRef.current = null;
-      restoreRunSnapshot(snapshot, chapterId);
+      restoreRunSnapshot(snapshot, chapterId, requestConversationId);
       setRunStatus('本次运行已停止');
     } catch (err: any) {
       setError(err.message || '停止智能体运行失败');
@@ -967,8 +1010,9 @@ export default function MangaAgentPage() {
   const resumeWithAnswer = async (answer: string) => {
     const currentRequest = userInputRequest;
     const id = Number(chapterId);
+    const requestConversationId = conversationId;
     const requestId = currentRequest?.requestId ?? currentRequest?.request_id;
-    if (!id || !requestId || loading) return;
+    if (!id || !requestConversationId || !requestId || loading) return;
     setLoading(true);
     setError('');
     setRunStatus('已收到你的选择，智能体正在继续...');
@@ -976,7 +1020,7 @@ export default function MangaAgentPage() {
     setCustomAnswer('');
     activeRequestIdRef.current = requestId;
     try {
-      const result = await resumeMangaAgentWithStream(id, requestId, answer, chapterId);
+      const result = await resumeMangaAgentWithStream(id, requestConversationId, requestId, answer, chapterId);
       if (!result.waiting && result.reply.trim()) {
         setMessages((prev) => [
           ...prev,
@@ -984,7 +1028,7 @@ export default function MangaAgentPage() {
         ]);
       }
       if (!result.waiting) {
-        await reloadMessages(id, chapterId);
+        await reloadMessages(id, chapterId, requestConversationId);
       }
       setDraftReply('');
       setRunEvents([]);
@@ -992,6 +1036,31 @@ export default function MangaAgentPage() {
       setError(err.message || '继续任务失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const startNewConversation = async () => {
+    const id = Number(chapterId);
+    if (!id || loading) return;
+    setError('');
+    setHistoryLoading(true);
+    try {
+      activeStreamControllerRef.current?.abort();
+      activeStreamControllerRef.current = null;
+      clearRunPoll();
+      const conversation = await createMangaAgentConversation(id);
+      setConversationId(conversation.conversationId);
+      setMessages([]);
+      setRunEvents([]);
+      setDraftReply('');
+      setUserInputRequest(null);
+      setCustomAnswer('');
+      setRunStatus('已开启新对话');
+      activeRequestIdRef.current = null;
+    } catch (err: any) {
+      setError(err.message || '开启新对话失败');
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -1064,6 +1133,14 @@ export default function MangaAgentPage() {
                   <div className="text-sm text-gray-100">{activeChapter ? `第 ${activeChapter.chapter_number} 话` : '未选择章节'}</div>
                 </div>
               </div>
+              <button
+                onClick={() => void startNewConversation()}
+                disabled={!chapterId || loading || historyLoading}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-200/20 bg-black/20 px-3 py-2 text-sm text-amber-100 transition hover:border-amber-200/40 hover:bg-amber-200/10 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Plus size={15} />
+                新对话
+              </button>
             </div>
 
             <div>
@@ -1091,7 +1168,7 @@ export default function MangaAgentPage() {
             </div>
             <div className="min-w-0">
               <div className="text-sm font-medium text-white">漫画智能体</div>
-              <div className="text-xs text-gray-500">对话记录按当前章节隔离保存</div>
+              <div className="text-xs text-gray-500">对话记录按当前章节和对话隔离保存</div>
             </div>
           </div>
 

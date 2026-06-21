@@ -9,7 +9,7 @@ Use this skill for changes under the Manga Agent workflow. Read `flow.md` when y
 
 ## Domain Model
 
-The Manga Agent is a chapter-scoped assistant. It helps the user inspect the selected chapter, create or rewrite storyboard scenes, save those scenes, and ask for a user decision when continuing would be unsafe.
+The Manga Agent is a chapter-scoped assistant with conversation-level isolation. A chapter can have multiple Manga Agent conversations; each conversation owns its messages, runs, AgentScope session, and conversation workspace.
 
 The selected workspace chapter is authoritative. Do not silently switch chapters based on free-text user intent. The agent should ask the user to switch the workspace if another chapter is intended.
 
@@ -36,13 +36,13 @@ Image generation is not performed by the Manga Agent. The agent prepares or refi
 
 The controller resolves the current user and delegates to `MangaAgentService`. Synchronous calls return a final reply. Stream calls return an `SseEmitter` and run on `mangaGenerationExecutor`.
 
-For a new run, `MangaAgentService` validates the message, starts or reuses a `MangaAgentRun`, checks idempotency through `GenerationGuardService.executeMangaAgentRun`, saves the user message, builds agent messages, syncs chapter knowledge to the AgentScope workspace, builds an `AgentRunRequest`, and executes the AgentScope gateway.
+For a new run, `MangaAgentService` resolves the active `MangaAgentConversation` unless a conversation id is supplied, validates the message, starts or reuses a `MangaAgentRun`, checks idempotency through `GenerationGuardService.executeMangaAgentRun`, saves the user message, builds agent messages from the selected conversation history, syncs chapter knowledge to the AgentScope workspace, builds an `AgentRunRequest`, and executes the AgentScope gateway.
 
 For resume, the service requires an existing `WAITING_USER` run, reconstructs a continuation message from the stored user-input request and the user's answer, clears waiting state, and continues the same request id.
 
-`AgentScopeHarnessAgentGateway` creates or reuses a per-user/story/chapter/task/model/workspace agent. For `AgentTaskType.MANGA_DIRECTOR`, it registers `MangaAgentToolFactory.Tools`.
+`AgentScopeHarnessAgentGateway` creates or reuses a per-user/story/chapter/conversation/task/model/workspace agent. For `AgentTaskType.MANGA_DIRECTOR`, it registers `MangaAgentToolFactory.Tools`.
 
-The frontend consumes AG-UI as the default live protocol. `POST /ag-ui/run` and `POST /ag-ui/runs/{requestId}/resume` emit only AG-UI frames for the official `HttpAgent` adapter. `POST /run-stream` and `POST /runs/{requestId}/resume-stream` remain compatibility endpoints and may emit legacy business events (`status`, `run_event`, `tool`, `user_input_requested`, `done`, and `error`) plus AG-UI frames. `MangaAgentPage.tsx` should use the AG-UI endpoints by default and treat legacy streams as fallback only. Keep the execution panel as the single place that explains what the agent is doing; do not add a second competing progress widget.
+The frontend consumes AG-UI as the default live protocol. `POST /conversations/{conversationId}/ag-ui/run` and `POST /conversations/{conversationId}/ag-ui/runs/{requestId}/resume` are the preferred endpoints. Legacy chapter-level endpoints auto-resolve the active conversation and remain compatibility paths. Keep the execution panel as the single place that explains what the agent is doing; do not add a second competing progress widget.
 
 In the main app navigation, `首页` is the Manga Agent conversation surface. `工作区` is the story/project management surface where users create, import, select, and edit stories. Do not point `workspace` back to `home`; that recreates a navigation loop and hides the agent from the first screen.
 
@@ -59,6 +59,7 @@ After a mutating tool succeeds, failures in the final agent response may degrade
 ## Invariants
 
 - `requestId` is the idempotency and resume key. Preserve it across stream retries and resume calls.
+- `conversationId` isolates messages, runs, AgentScope session id, and conversation workspace. Starting a new conversation must not reuse the old AgentScope session.
 - Only `RUNNING` and `WAITING_USER` are open statuses. Terminal statuses are `SUCCEEDED`, `DEGRADED`, `FAILED`, `CANCELLED`, and `INTERRUPTED`. `CANCELLED` is user initiated through `/runs/{requestId}/cancel`; `INTERRUPTED` is system repair for stale `RUNNING` runs.
 - Persist non-`text_delta` run events so the frontend can restore an interrupted stream.
 - Frontend run progress should be derived from persisted/streamed events, not from hard-coded timers or generic "running" text alone.
@@ -78,6 +79,7 @@ After a mutating tool succeeds, failures in the final agent response may degrade
 - If cancellation or stale-run repair changes, update backend status tests, frontend terminal-state rendering, and the flow reference.
 - If prompt or workspace knowledge changes, check both `MangaAgentConversationService.buildSystemPrompt` and `AgentWorkspaceSyncService.buildKnowledge`.
 - If AgentScope session/cache key inputs change, update `AgentScopeHarnessAgentGatewayTest` and `AgentSessionIdFactoryTest`.
+- If conversation isolation changes, update `MangaAgentConversationRegistry`, message/run repositories, frontend conversation API helpers, and this skill.
 - If this skill disagrees with code, trust code first and update this skill or `flow.md`.
 
 ## Validation

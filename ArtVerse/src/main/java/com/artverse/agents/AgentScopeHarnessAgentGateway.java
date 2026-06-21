@@ -174,6 +174,7 @@ public class AgentScopeHarnessAgentGateway implements HarnessAgentGateway {
                 "user", nullToKey(request.userId()),
                 "story", String.valueOf(request.storyId()),
                 "chapter", String.valueOf(request.chapterId()),
+                "conversation", nullToKey(request.conversationId() == null ? null : request.conversationId().toString()),
                 "task", request.taskType().name(),
                 "provider", nullToKey(spec.provider()),
                 "model", nullToKey(spec.model()),

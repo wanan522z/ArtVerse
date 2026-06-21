@@ -3,6 +3,7 @@ package com.artverse.application;
 import com.artverse.agents.AgentRunEvent;
 import com.artverse.common.BusinessException;
 import com.artverse.domain.Chapter;
+import com.artverse.domain.MangaAgentConversation;
 import com.artverse.domain.MangaAgentRun;
 import com.artverse.domain.MangaAgentRunEventRecord;
 import com.artverse.domain.MangaAgentRunStatus;
@@ -61,9 +62,39 @@ public class MangaAgentRunService {
                 });
     }
 
+    @Transactional
+    public MangaAgentRun startOrReuse(MangaAgentConversation conversation, UUID requestId, String inputMessage) {
+        return runRepository.findByConversationIdAndRequestId(conversation.getId(), requestId)
+                .map(existing -> {
+                    if (existing.getStatus() == MangaAgentRunStatus.WAITING_USER) {
+                        existing.setStatus(MangaAgentRunStatus.RUNNING);
+                        existing.setUserInputRequestJson(null);
+                        existing.setErrorMessage(null);
+                        existing.setUpdatedAt(OffsetDateTime.now());
+                    }
+                    return runRepository.save(existing);
+                })
+                .orElseGet(() -> {
+                    MangaAgentRun run = new MangaAgentRun();
+                    run.setUser(conversation.getUser());
+                    run.setStory(conversation.getStory());
+                    run.setChapter(conversation.getChapter());
+                    run.setConversation(conversation);
+                    run.setRequestId(requestId);
+                    run.setInputMessage(inputMessage);
+                    run.setStatus(MangaAgentRunStatus.RUNNING);
+                    return runRepository.save(run);
+                });
+    }
+
     @Transactional(readOnly = true)
     public Optional<MangaAgentRun> findRun(Long userId, Long chapterId, UUID requestId) {
         return runRepository.findByUserIdAndChapterIdAndRequestId(userId, chapterId, requestId);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<MangaAgentRun> findRun(MangaAgentConversation conversation, UUID requestId) {
+        return runRepository.findByConversationIdAndRequestId(conversation.getId(), requestId);
     }
 
     @Transactional(readOnly = true)
@@ -79,8 +110,29 @@ public class MangaAgentRunService {
     }
 
     @Transactional(readOnly = true)
+    public Optional<MangaAgentRun> findLatestOpenRun(MangaAgentConversation conversation) {
+        return runRepository.findByConversationIdAndStatusInOrderByUpdatedAtDesc(
+                        conversation.getId(),
+                        OPEN_STATUSES,
+                        PageRequest.of(0, 1)
+                )
+                .stream()
+                .findFirst();
+    }
+
+    @Transactional(readOnly = true)
     public MangaAgentRun requireWaitingRun(Long userId, Long chapterId, UUID requestId) {
         MangaAgentRun run = runRepository.findByUserIdAndChapterIdAndRequestId(userId, chapterId, requestId)
+                .orElseThrow(() -> new BusinessException(404, "No waiting agent run found"));
+        if (run.getStatus() != MangaAgentRunStatus.WAITING_USER) {
+            throw new BusinessException(404, "No waiting agent run found");
+        }
+        return run;
+    }
+
+    @Transactional(readOnly = true)
+    public MangaAgentRun requireWaitingRun(MangaAgentConversation conversation, UUID requestId) {
+        MangaAgentRun run = runRepository.findByConversationIdAndRequestId(conversation.getId(), requestId)
                 .orElseThrow(() -> new BusinessException(404, "No waiting agent run found"));
         if (run.getStatus() != MangaAgentRunStatus.WAITING_USER) {
             throw new BusinessException(404, "No waiting agent run found");
@@ -111,8 +163,29 @@ public class MangaAgentRunService {
     }
 
     @Transactional
+    public void markWaiting(MangaAgentConversation conversation, UUID requestId, AgentUserInputRequest request) {
+        MangaAgentRun run = runRepository.findByConversationIdAndRequestId(conversation.getId(), requestId)
+                .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
+        run.setStatus(MangaAgentRunStatus.WAITING_USER);
+        run.setUserInputRequestJson(toJson(request));
+        run.setUpdatedAt(OffsetDateTime.now());
+        runRepository.save(run);
+    }
+
+    @Transactional
     public void markRunning(UUID requestId, Long userId, Long chapterId) {
         MangaAgentRun run = runRepository.findByUserIdAndChapterIdAndRequestId(userId, chapterId, requestId)
+                .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
+        run.setStatus(MangaAgentRunStatus.RUNNING);
+        run.setUserInputRequestJson(null);
+        run.setErrorMessage(null);
+        run.setUpdatedAt(OffsetDateTime.now());
+        runRepository.save(run);
+    }
+
+    @Transactional
+    public void markRunning(MangaAgentConversation conversation, UUID requestId) {
+        MangaAgentRun run = runRepository.findByConversationIdAndRequestId(conversation.getId(), requestId)
                 .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
         run.setStatus(MangaAgentRunStatus.RUNNING);
         run.setUserInputRequestJson(null);
@@ -127,8 +200,18 @@ public class MangaAgentRunService {
     }
 
     @Transactional
+    public void markSucceeded(MangaAgentConversation conversation, UUID requestId, String reply) {
+        markTerminal(conversation, requestId, MangaAgentRunStatus.SUCCEEDED, reply, null);
+    }
+
+    @Transactional
     public void markDegraded(UUID requestId, Long userId, Long chapterId, String reply, String error) {
         markTerminal(requestId, userId, chapterId, MangaAgentRunStatus.DEGRADED, reply, error);
+    }
+
+    @Transactional
+    public void markDegraded(MangaAgentConversation conversation, UUID requestId, String reply, String error) {
+        markTerminal(conversation, requestId, MangaAgentRunStatus.DEGRADED, reply, error);
     }
 
     @Transactional
@@ -137,8 +220,19 @@ public class MangaAgentRunService {
     }
 
     @Transactional
+    public void markFailed(MangaAgentConversation conversation, UUID requestId, String error) {
+        markTerminal(conversation, requestId, MangaAgentRunStatus.FAILED, null, error);
+    }
+
+    @Transactional
     public MangaAgentRun cancel(UUID requestId, Long userId, Long chapterId, String reason) {
         return markTerminal(requestId, userId, chapterId, MangaAgentRunStatus.CANCELLED, null,
+                reason == null || reason.isBlank() ? "Agent run cancelled by user" : reason);
+    }
+
+    @Transactional
+    public MangaAgentRun cancel(MangaAgentConversation conversation, UUID requestId, String reason) {
+        return markTerminal(conversation, requestId, MangaAgentRunStatus.CANCELLED, null,
                 reason == null || reason.isBlank() ? "Agent run cancelled by user" : reason);
     }
 
@@ -169,6 +263,13 @@ public class MangaAgentRunService {
     @Transactional(readOnly = true)
     public boolean isTerminal(UUID requestId, Long userId, Long chapterId) {
         return runRepository.findByUserIdAndChapterIdAndRequestId(userId, chapterId, requestId)
+                .map(run -> isTerminal(run.getStatus()))
+                .orElse(false);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isTerminal(MangaAgentConversation conversation, UUID requestId) {
+        return runRepository.findByConversationIdAndRequestId(conversation.getId(), requestId)
                 .map(run -> isTerminal(run.getStatus()))
                 .orElse(false);
     }
@@ -235,6 +336,22 @@ public class MangaAgentRunService {
     private MangaAgentRun markTerminal(UUID requestId, Long userId, Long chapterId, MangaAgentRunStatus status,
                                        String reply, String error) {
         MangaAgentRun run = runRepository.findByUserIdAndChapterIdAndRequestId(userId, chapterId, requestId)
+                .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
+        if (isTerminal(run.getStatus())) {
+            return run;
+        }
+        run.setStatus(status);
+        run.setFinalReply(reply);
+        run.setErrorMessage(error);
+        run.setUserInputRequestJson(null);
+        run.setCompletedAt(OffsetDateTime.now());
+        run.setUpdatedAt(OffsetDateTime.now());
+        return runRepository.save(run);
+    }
+
+    private MangaAgentRun markTerminal(MangaAgentConversation conversation, UUID requestId, MangaAgentRunStatus status,
+                                       String reply, String error) {
+        MangaAgentRun run = runRepository.findByConversationIdAndRequestId(conversation.getId(), requestId)
                 .orElseThrow(() -> new BusinessException(404, "Agent run not found"));
         if (isTerminal(run.getStatus())) {
             return run;

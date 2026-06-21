@@ -2,6 +2,7 @@ package com.artverse.application;
 
 import com.artverse.agents.AgentMessage;
 import com.artverse.domain.Chapter;
+import com.artverse.domain.MangaAgentConversation;
 import com.artverse.domain.MangaAgentMessage;
 import com.artverse.domain.MessageRole;
 import com.artverse.domain.User;
@@ -33,9 +34,20 @@ public class MangaAgentConversationService {
     }
 
     @Transactional(readOnly = true)
+    public List<MangaAgentMessage> listMessages(MangaAgentConversation conversation) {
+        return mangaAgentMessageRepository.findByConversationIdOrderByCreatedAtAsc(conversation.getId());
+    }
+
+    @Transactional(readOnly = true)
     public Optional<MangaAgentMessage> findAssistantReply(Long userId, Long chapterId, UUID requestId) {
         return mangaAgentMessageRepository.findByUserIdAndChapterIdAndRequestIdAndRole(
                 userId, chapterId, requestId, MessageRole.ASSISTANT);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<MangaAgentMessage> findAssistantReply(MangaAgentConversation conversation, UUID requestId) {
+        return mangaAgentMessageRepository.findByConversationIdAndRequestIdAndRole(
+                conversation.getId(), requestId, MessageRole.ASSISTANT);
     }
 
     public List<AgentMessage> buildMessages(Chapter chapter, User user, List<MangaAgentMessage> history,
@@ -65,8 +77,30 @@ public class MangaAgentConversationService {
     }
 
     @Transactional
+    public void saveMessage(MangaAgentConversation conversation, MessageRole role, String content, UUID requestId) {
+        if (mangaAgentMessageRepository.findByConversationIdAndRequestIdAndRole(
+                conversation.getId(), requestId, role).isPresent()) {
+            return;
+        }
+        MangaAgentMessage message = new MangaAgentMessage();
+        message.setUser(conversation.getUser());
+        message.setStory(conversation.getStory());
+        message.setChapter(conversation.getChapter());
+        message.setConversation(conversation);
+        message.setRole(role);
+        message.setContent(content);
+        message.setRequestId(requestId);
+        mangaAgentMessageRepository.save(message);
+    }
+
+    @Transactional
     public void saveFailureMessage(User user, Chapter chapter, String error, UUID requestId) {
         saveMessage(user, chapter, MessageRole.SYSTEM, failureContent(error), requestId);
+    }
+
+    @Transactional
+    public void saveFailureMessage(MangaAgentConversation conversation, String error, UUID requestId) {
+        saveMessage(conversation, MessageRole.SYSTEM, failureContent(error), requestId);
     }
 
     public String resumeMessage(String originalInput, AgentUserInputRequest waiting, String answer) {
@@ -97,6 +131,17 @@ public class MangaAgentConversationService {
         String reply = fallbackReply(chapter, toolState);
         saveMessage(user, chapter, MessageRole.ASSISTANT, reply, requestId);
         saveMessage(user, chapter, MessageRole.SYSTEM, fallbackFailureContent(error, toolState), requestId);
+        return Map.of(
+                "reply", reply,
+                "agent_final_response_degraded", true
+        );
+    }
+
+    public Map<String, Object> fallbackAfterToolSuccess(MangaAgentConversation conversation, UUID requestId,
+                                                        AgentRunToolStatus.RunState toolState, String error) {
+        String reply = fallbackReply(conversation.getChapter(), toolState);
+        saveMessage(conversation, MessageRole.ASSISTANT, reply, requestId);
+        saveMessage(conversation, MessageRole.SYSTEM, fallbackFailureContent(error, toolState), requestId);
         return Map.of(
                 "reply", reply,
                 "agent_final_response_degraded", true

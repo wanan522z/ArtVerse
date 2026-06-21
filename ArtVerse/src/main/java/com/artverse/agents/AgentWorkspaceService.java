@@ -16,16 +16,25 @@ public class AgentWorkspaceService {
     private final @Qualifier("agentScopeWorkspace") Path workspaceRoot;
 
     public Path workspaceFor(AgentRunRequest request) {
-        return workspaceFor(request.userId(), request.storyId());
+        return workspaceFor(request.userId(), request.storyId(), request.conversationId());
     }
 
     public Path workspaceFor(String userId, Long storyId) {
+        return workspaceFor(userId, storyId, null);
+    }
+
+    public Path workspaceFor(String userId, Long storyId, Object conversationId) {
         Path workspace = workspaceRoot
                 .resolve("users")
                 .resolve(AgentSessionIdFactory.safeSegment(userId))
                 .resolve("stories")
-                .resolve(AgentSessionIdFactory.safeSegment(storyId))
-                .normalize();
+                .resolve(AgentSessionIdFactory.safeSegment(storyId));
+        if (conversationId != null) {
+            workspace = workspace
+                    .resolve("conversations")
+                    .resolve(AgentSessionIdFactory.safeSegment(conversationId));
+        }
+        workspace = workspace.normalize();
         ensureWithinRoot(workspace);
         initialize(workspace);
         return workspace;

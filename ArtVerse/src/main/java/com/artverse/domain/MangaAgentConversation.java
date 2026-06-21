@@ -10,16 +10,22 @@ import java.util.UUID;
 
 @Entity
 @Table(
-        name = "manga_agent_runs",
-        uniqueConstraints = @UniqueConstraint(name = "uk_manga_agent_runs_user_request", columnNames = {"user_id", "request_id"})
+        name = "manga_agent_conversations",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_manga_agent_conversations_uuid",
+                columnNames = {"conversation_uuid"}
+        )
 )
 @Getter
 @Setter
-public class MangaAgentRun {
+public class MangaAgentConversation {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "conversation_uuid", nullable = false)
+    private UUID conversationUuid;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
@@ -36,29 +42,12 @@ public class MangaAgentRun {
     @JsonIgnore
     private Chapter chapter;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "conversation_id", nullable = false)
-    @JsonIgnore
-    private MangaAgentConversation conversation;
-
-    @Column(name = "request_id", nullable = false)
-    private UUID requestId;
+    @Column(nullable = false, length = 120)
+    private String title;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
-    private MangaAgentRunStatus status = MangaAgentRunStatus.RUNNING;
-
-    @Column(name = "input_message", nullable = false, columnDefinition = "TEXT")
-    private String inputMessage;
-
-    @Column(name = "final_reply", columnDefinition = "TEXT")
-    private String finalReply;
-
-    @Column(name = "error_message", columnDefinition = "TEXT")
-    private String errorMessage;
-
-    @Column(name = "user_input_request_json", columnDefinition = "TEXT")
-    private String userInputRequestJson;
+    private MangaAgentConversationStatus status = MangaAgentConversationStatus.ACTIVE;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -66,15 +55,16 @@ public class MangaAgentRun {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
-    @Column(name = "completed_at")
-    private OffsetDateTime completedAt;
+    @Column(name = "archived_at")
+    private OffsetDateTime archivedAt;
 
     @PrePersist
     protected void onCreate() {
         OffsetDateTime now = OffsetDateTime.now();
         createdAt = now;
         updatedAt = now;
-        if (requestId == null) requestId = UUID.randomUUID();
+        if (conversationUuid == null) conversationUuid = UUID.randomUUID();
+        if (status == null) status = MangaAgentConversationStatus.ACTIVE;
     }
 
     @PreUpdate

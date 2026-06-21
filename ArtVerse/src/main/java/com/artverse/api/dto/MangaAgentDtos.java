@@ -3,6 +3,7 @@ package com.artverse.api.dto;
 import com.artverse.domain.MangaAgentMessage;
 import com.artverse.application.AgentUserInputRequest;
 import com.artverse.application.MangaAgentRunService;
+import com.artverse.domain.MangaAgentConversation;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -23,6 +24,27 @@ public final class MangaAgentDtos {
     }
 
     public record OpenRunResponse(RunStateResponse run) {
+    }
+
+    public record ConversationDto(UUID conversationId,
+                                  String title,
+                                  String status,
+                                  OffsetDateTime createdAt,
+                                  OffsetDateTime updatedAt,
+                                  OffsetDateTime archivedAt) {
+        public static ConversationDto from(MangaAgentConversation conversation) {
+            return new ConversationDto(
+                    conversation.getConversationUuid(),
+                    conversation.getTitle(),
+                    conversation.getStatus().name(),
+                    conversation.getCreatedAt(),
+                    conversation.getUpdatedAt(),
+                    conversation.getArchivedAt()
+            );
+        }
+    }
+
+    public record ConversationsResponse(List<ConversationDto> conversations) {
     }
 
     public record RunStateResponse(UUID requestId,
