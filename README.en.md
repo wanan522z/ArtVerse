@@ -23,10 +23,19 @@ It combines a Spring Boot backend, a Vite React frontend, and an AgentScope-base
 
 - `ArtVerse/` - backend service
 - `frontend/` - web client
-- `ArtVerse/docs/knowledge/` - business knowledge and agent flow notes
+- `docs/knowledge/` - business knowledge and agent flow notes
 - `.agentscope/` - local AgentScope workspace data
 
 ## Quick Start
+
+### Docker dependencies
+
+```bash
+cd ArtVerse
+docker compose up -d
+```
+
+This starts PostgreSQL, Redis, and MinIO using `ArtVerse/docker-compose.yml`.
 
 ### Backend
 
@@ -34,6 +43,14 @@ It combines a Spring Boot backend, a Vite React frontend, and an AgentScope-base
 cd ArtVerse
 mvn spring-boot:run
 ```
+
+### Backend config
+
+Set the backend environment before running the app:
+
+- `DEEPSEEK_API_KEY`
+- `COZE_API_KEY` if you use Coze-based tools
+- Database, Redis, and MinIO settings from `ArtVerse/src/main/resources/application.yml`
 
 ### Frontend
 
@@ -66,6 +83,6 @@ npm run lint
 
 ## Documentation
 
-- Business knowledge index: `ArtVerse/docs/knowledge/INDEX.md`
-- Manga agent skill: `ArtVerse/docs/knowledge/modules/manga-agent/SKILL.md`
-- Manga agent flow: `ArtVerse/docs/knowledge/modules/manga-agent/flow.md`
+- Business knowledge index: `docs/knowledge/INDEX.md`
+- Manga agent skill: `docs/knowledge/modules/manga-agent/SKILL.md`
+- Manga agent flow: `docs/knowledge/modules/manga-agent/flow.md`

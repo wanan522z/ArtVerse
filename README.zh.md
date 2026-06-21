@@ -23,10 +23,19 @@ ArtVerse 是一个全栈 AI 漫画创作工作台。
 
 - `ArtVerse/` - 后端服务
 - `frontend/` - Web 前端
-- `ArtVerse/docs/knowledge/` - 业务知识与智能体流程说明
+- `docs/knowledge/` - 业务知识与智能体流程说明
 - `.agentscope/` - 本地 AgentScope 工作区数据
 
 ## 快速启动
+
+### Docker 依赖
+
+```bash
+cd ArtVerse
+docker compose up -d
+```
+
+这会使用 `ArtVerse/docker-compose.yml` 启动 PostgreSQL、Redis 和 MinIO。
 
 ### 后端
 
@@ -34,6 +43,14 @@ ArtVerse 是一个全栈 AI 漫画创作工作台。
 cd ArtVerse
 mvn spring-boot:run
 ```
+
+### 后端配置
+
+启动前请配置后端环境变量：
+
+- `DEEPSEEK_API_KEY`
+- 如果使用 Coze 工具，请配置 `COZE_API_KEY`
+- 数据库、Redis、MinIO 连接信息参考 `ArtVerse/src/main/resources/application.yml`
 
 ### 前端
 
@@ -66,6 +83,6 @@ npm run lint
 
 ## 文档
 
-- 业务知识索引：`ArtVerse/docs/knowledge/INDEX.md`
-- 漫画智能体技能：`ArtVerse/docs/knowledge/modules/manga-agent/SKILL.md`
-- 漫画智能体流程：`ArtVerse/docs/knowledge/modules/manga-agent/flow.md`
+- 业务知识索引：`docs/knowledge/INDEX.md`
+- 漫画智能体技能：`docs/knowledge/modules/manga-agent/SKILL.md`
+- 漫画智能体流程：`docs/knowledge/modules/manga-agent/flow.md`

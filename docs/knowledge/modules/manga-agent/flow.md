@@ -18,7 +18,7 @@ All endpoints are scoped to `/api/chapters/{chapterId}/manga-agent`.
 - `POST /conversations/{conversationId}/ag-ui/runs/{requestId}/resume`: preferred AG-UI streaming resume for one conversation.
 - `POST /run`: synchronous run. Body: `{ message, requestId? }`. Response: `{ reply, requestId }`.
 - `POST /run-stream`: compatibility streaming run. Body: `{ message, requestId? }`. Emits legacy business events (`status`, `run_event`, `tool`, `user_input_requested`, `done`, and `error`) plus AG-UI protocol events as default SSE `message` frames.
-- `POST /ag-ui/run`: default streaming run for AG-UI clients. Body: `{ message, requestId? }`. Emits only AG-UI protocol events as default SSE `message` frames, so the frontend can consume it through the official `HttpAgent` event pipeline without legacy event noise.
+- `POST /ag-ui/run`: default streaming run for AG-UI clients. Body: `{ message, requestId? }`. Emits only AG-UI protocol events as default SSE `message` frames.
 - `GET /runs/open`: returns the latest `RUNNING` or `WAITING_USER` run snapshot, if any.
 - `GET /runs/{requestId}`: returns a persisted run snapshot with events.
 - `POST /runs/{requestId}/cancel`: marks an open run as `CANCELLED`. The frontend should also abort its active AG-UI subscription, but the persisted run state is the source of truth.
