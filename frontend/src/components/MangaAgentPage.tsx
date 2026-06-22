@@ -49,9 +49,9 @@ type AgentStreamResult = {
 };
 
 const STARTER_PROMPTS = [
-  '帮我检查这一话的漫画进度，并告诉我下一步做什么',
-  '根据当前内容，先帮我生成这一话的分镜',
-  '帮我看看分镜是否还需要润色，再给出修改建议',
+  '甯垜妫€鏌ヨ繖涓€璇濈殑婕敾杩涘害锛屽苟鍛婅瘔鎴戜笅涓€姝ュ仛浠€涔?,
+  '鏍规嵁褰撳墠鍐呭锛屽厛甯垜鐢熸垚杩欎竴璇濈殑鍒嗛暅',
+  '甯垜鐪嬬湅鍒嗛暅鏄惁杩橀渶瑕佹鼎鑹诧紝鍐嶇粰鍑轰慨鏀瑰缓璁?,
 ];
 
 function toMessages(items: MangaAgentMessage[]): Message[] {
@@ -79,9 +79,9 @@ function formatSystemMessage(content: string): string | null {
     return null;
   }
   if (type === 'agent_run_failed') {
-    return `系统提示：智能体本次响应失败。${message ? `原因：${message}` : '请稍后重试。'}`;
+    return `绯荤粺鎻愮ず锛氭櫤鑳戒綋鏈鍝嶅簲澶辫触銆?{message ? `鍘熷洜锛?{message}` : '璇风◢鍚庨噸璇曘€?}`;
   }
-  return `系统提示：${content}`;
+  return `绯荤粺鎻愮ず锛?{content}`;
 }
 
 function appendRunEvent(events: AgentRunTimelineEvent[], event: AgentRunTimelineEvent): AgentRunTimelineEvent[] {
@@ -112,7 +112,7 @@ function formatRequestId(requestId: string | null | undefined): string {
   if (!requestId) {
     return '';
   }
-  return requestId.length <= 18 ? requestId : `${requestId.slice(0, 8)}…${requestId.slice(-6)}`;
+  return requestId.length <= 18 ? requestId : `${requestId.slice(0, 8)}鈥?{requestId.slice(-6)}`;
 }
 
 function formatTimestamp(value?: string): string {
@@ -141,8 +141,8 @@ function timelineEventSummary(event: AgentRunTimelineEvent): {
   if (event.type === 'status' || type === 'ag_ui_state_snapshot') {
     return {
       tone: 'neutral',
-      title: event.label || event.phase || '运行状态',
-      detail: String(event.text || data.message || '智能体正在推进任务'),
+      title: event.label || event.phase || '杩愯鐘舵€?,
+      detail: String(event.text || data.message || '鏅鸿兘浣撴鍦ㄦ帹杩涗换鍔?),
       icon: 'clock',
     };
   }
@@ -151,15 +151,15 @@ function timelineEventSummary(event: AgentRunTimelineEvent): {
     || type === 'ag_ui_tool_call_end'
     || type === 'ag_ui_tool_call_result') {
     const tool = String(data.tool || event.toolName || 'tool');
-    const saved = data.saved === true ? '已保存' : '';
-    const scenesCount = typeof data.scenes_count === 'number' ? ` · ${data.scenes_count} 页` : '';
-    const suffix = data.error ? ` · ${String(data.error)}` : `${saved}${scenesCount}`;
+    const saved = data.saved === true ? '宸蹭繚瀛? : '';
+    const scenesCount = typeof data.scenes_count === 'number' ? ` 路 ${data.scenes_count} 椤礰 : '';
+    const suffix = data.error ? ` 路 ${String(data.error)}` : `${saved}${scenesCount}`;
     return {
       tone: data.succeeded === false ? 'error' : 'tool',
       title: tool,
       detail: data.succeeded === false
-        ? `工具调用失败${suffix ? `：${suffix}` : ''}`
-        : `工具调用完成${suffix}`,
+        ? `宸ュ叿璋冪敤澶辫触${suffix ? `锛?{suffix}` : ''}`
+        : `宸ュ叿璋冪敤瀹屾垚${suffix}`,
       icon: data.succeeded === false ? 'warning' : 'wrench',
     };
   }
@@ -167,72 +167,72 @@ function timelineEventSummary(event: AgentRunTimelineEvent): {
   if (type === 'text_delta') {
     return {
       tone: 'neutral',
-      title: '回复生成中',
-      detail: String(event.text || data.text || '智能体正在拼接最终回复'),
+      title: '鍥炲鐢熸垚涓?,
+      detail: String(event.text || data.text || '鏅鸿兘浣撴鍦ㄦ嫾鎺ユ渶缁堝洖澶?),
       icon: 'bot',
     };
   }
   if (type === 'run_started' || type === 'ag_ui_run_started') {
     return {
       tone: 'thinking',
-      title: label || '智能体已启动',
-      detail: '开始分析当前章节上下文',
+      title: label || '鏅鸿兘浣撳凡鍚姩',
+      detail: '寮€濮嬪垎鏋愬綋鍓嶇珷鑺備笂涓嬫枃',
       icon: 'bot',
     };
   }
   if (type === 'context_loading') {
     return {
       tone: 'thinking',
-      title: label || '同步章节知识',
-      detail: '正在把故事知识写入工作区',
+      title: label || '鍚屾绔犺妭鐭ヨ瘑',
+      detail: '姝ｅ湪鎶婃晠浜嬬煡璇嗗啓鍏ュ伐浣滃尯',
       icon: 'sparkles',
     };
   }
   if (type === 'model_started' || type === 'thinking_started' || type === 'ag_ui_step_started') {
     return {
       tone: 'thinking',
-      title: label || '模型推理中',
-      detail: '正在推理下一步动作',
+      title: label || '妯″瀷鎺ㄧ悊涓?,
+      detail: '姝ｅ湪鎺ㄧ悊涓嬩竴姝ュ姩浣?,
       icon: 'sparkles',
     };
   }
   if (type === 'tool_call_started' || type === 'tool_started' || type === 'tool_call_ready') {
     return {
       tone: 'tool',
-      title: label || '工具处理中',
-      detail: '智能体正在调用工具',
+      title: label || '宸ュ叿澶勭悊涓?,
+      detail: '鏅鸿兘浣撴鍦ㄨ皟鐢ㄥ伐鍏?,
       icon: 'wrench',
     };
   }
   if (type === 'tool_finished') {
     return {
       tone: 'tool',
-      title: label || '工具执行完毕',
-      detail: '工具调用已结束，正在整理结果',
+      title: label || '宸ュ叿鎵ц瀹屾瘯',
+      detail: '宸ュ叿璋冪敤宸茬粨鏉燂紝姝ｅ湪鏁寸悊缁撴灉',
       icon: 'wrench',
     };
   }
   if (type === 'user_answered') {
     return {
       tone: 'waiting',
-      title: '已收到用户选择',
-      detail: String(data.answer || '继续默认方案'),
+      title: '宸叉敹鍒扮敤鎴烽€夋嫨',
+      detail: String(data.answer || '缁х画榛樿鏂规'),
       icon: 'question',
     };
   }
   if (type === 'reply_ready') {
     return {
       tone: 'success',
-      title: label || '最终回复已生成',
-      detail: '智能体已经开始输出结果',
+      title: label || '鏈€缁堝洖澶嶅凡鐢熸垚',
+      detail: '鏅鸿兘浣撳凡缁忓紑濮嬭緭鍑虹粨鏋?,
       icon: 'check',
     };
   }
   if (type === 'run_finished' || type === 'ag_ui_run_finished') {
     return {
       tone: 'success',
-      title: label || '任务完成',
-      detail: '本次运行已经结束',
+      title: label || '浠诲姟瀹屾垚',
+      detail: '鏈杩愯宸茬粡缁撴潫',
       icon: 'check',
     };
   }
@@ -240,23 +240,23 @@ function timelineEventSummary(event: AgentRunTimelineEvent): {
     const options = Array.isArray(data.options) ? data.options : [];
     return {
       tone: 'waiting',
-      title: String(data.question || '需要你做个决定'),
-      detail: String(data.reason || `可选项 ${options.length} 个`),
+      title: String(data.question || '闇€瑕佷綘鍋氫釜鍐冲畾'),
+      detail: String(data.reason || `鍙€夐」 ${options.length} 涓猔),
       icon: 'question',
     };
   }
   if (event.type === 'error' || type === 'ag_ui_run_error') {
     return {
       tone: 'error',
-      title: '运行失败',
-      detail: String(data.detail || data.error || data.message || '智能体请求失败'),
+      title: '杩愯澶辫触',
+      detail: String(data.detail || data.error || data.message || '鏅鸿兘浣撹姹傚け璐?),
       icon: 'warning',
     };
   }
   return {
     tone: 'neutral',
     title: label || event.type,
-    detail: '执行事件',
+    detail: '鎵ц浜嬩欢',
     icon: 'clock',
   };
 }
@@ -443,7 +443,7 @@ export default function MangaAgentPage() {
   const [chapterLoading, setChapterLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState('');
-  const [runStatus, setRunStatus] = useState('正在思考当前章节...');
+  const [runStatus, setRunStatus] = useState('姝ｅ湪鎬濊€冨綋鍓嶇珷鑺?..');
   const [runEvents, setRunEvents] = useState<AgentRunTimelineEvent[]>([]);
   const [draftReply, setDraftReply] = useState('');
   const [userInputRequest, setUserInputRequest] = useState<AgentUserInputRequest | null>(null);
@@ -493,7 +493,7 @@ export default function MangaAgentPage() {
         setStories(list);
         if (list.length > 0) setStoryId(String(list[0].id));
       } catch (err: any) {
-        if (active) setError(err.message || '加载故事失败');
+        if (active) setError(err.message || '鍔犺浇鏁呬簨澶辫触');
       } finally {
         if (active) setBootLoading(false);
       }
@@ -523,7 +523,7 @@ export default function MangaAgentPage() {
           return list[0] ? String(list[0].id) : '';
         });
       } catch (err: any) {
-        if (active) setError(err.message || '加载章节失败');
+        if (active) setError(err.message || '鍔犺浇绔犺妭澶辫触');
       } finally {
         if (active) setChapterLoading(false);
       }
@@ -569,7 +569,7 @@ export default function MangaAgentPage() {
         if (!active || !openRun) return;
         restoreRunSnapshot(openRun, chapterId, activeConversation.conversationId);
       } catch (err: any) {
-        if (active) setError(err.message || '加载对话记录失败');
+        if (active) setError(err.message || '鍔犺浇瀵硅瘽璁板綍澶辫触');
       } finally {
         if (active) setHistoryLoading(false);
       }
@@ -601,7 +601,7 @@ export default function MangaAgentPage() {
     fallbackRequestId: string,
   ): AgentStreamResult | Error | null => {
     if (event.type === 'status') {
-      setRunStatus(event.data.message || '智能体正在处理当前章节...');
+      setRunStatus(event.data.message || '鏅鸿兘浣撴鍦ㄥ鐞嗗綋鍓嶇珷鑺?..');
       return null;
     }
     if (event.type === 'run_event') {
@@ -614,14 +614,14 @@ export default function MangaAgentPage() {
     }
     if (event.type === 'tool') {
       const toolLabel = event.data.tool === 'save_structured_storyboard' || event.data.tool === 'save_storyboard'
-        ? '分镜保存'
+        ? '鍒嗛暅淇濆瓨'
         : event.data.tool === 'generate_storyboard'
-          ? '分镜生成'
-          : '工具调用';
+          ? '鍒嗛暅鐢熸垚'
+          : '宸ュ叿璋冪敤';
       if (event.data.succeeded && event.data.saved) {
-        setRunStatus(`${toolLabel}已完成，正在整理回复...`);
+        setRunStatus(`${toolLabel}宸插畬鎴愶紝姝ｅ湪鏁寸悊鍥炲...`);
       } else if (!event.data.succeeded) {
-        setRunStatus(`${toolLabel}尝试未通过，智能体正在修正...`);
+        setRunStatus(`${toolLabel}灏濊瘯鏈€氳繃锛屾櫤鑳戒綋姝ｅ湪淇...`);
       }
       return null;
     }
@@ -638,7 +638,7 @@ export default function MangaAgentPage() {
         setRunEvents((prev) => appendRunEvent(prev, {
           type: 'ag_ui_state_snapshot',
           phase: 'status',
-          label: message || '运行状态',
+          label: message || '杩愯鐘舵€?,
           status: agEvent.snapshot?.status,
           data: { type: 'ag_ui_state_snapshot', message },
           createdAt: new Date().toISOString(),
@@ -649,7 +649,7 @@ export default function MangaAgentPage() {
         setRunEvents((prev) => appendRunEvent(prev, {
           type: 'ag_ui_run_started',
           phase: 'started',
-          label: '智能体已启动',
+          label: '鏅鸿兘浣撳凡鍚姩',
           status: 'running',
           data: { type: 'ag_ui_run_started' },
           createdAt: new Date().toISOString(),
@@ -669,9 +669,50 @@ export default function MangaAgentPage() {
         }));
         return null;
       }
+      if (agEvent.type === 'CUSTOM' && (agEvent as any).name === 'workflow_step') {
+        const value = (agEvent as any).value as { node?: string; status?: string; route?: string; storyTitle?: string; chapterDisplayName?: string; sceneCount?: number; imageCount?: number; warnings?: string[] } | undefined;
+        const node = String(value?.node || 'workflow');
+        const status = String(value?.status || 'running');
+        const title = ({
+          ROUTING: '正在路由任务',
+          COLLECTING_CONTEXT: '正在收集上下文',
+          GENERATING: '正在生成内容',
+          EVALUATING: '正在评估结果',
+          WAITING_USER: '正在等待用户决策',
+          COMPLETED: '流程已完成',
+        } as Record<string, string>)[node] || '工作流节点';
+        const detailParts: string[] = [];
+        if (value?.route) detailParts.push(`路由 ${value.route}`);
+        if (value?.storyTitle) detailParts.push(`故事 ${value.storyTitle}`);
+        if (value?.chapterDisplayName) detailParts.push(`章节 ${value.chapterDisplayName}`);
+        if (typeof value?.sceneCount === 'number') detailParts.push(`分镜 ${value.sceneCount}`);
+        if (typeof value?.imageCount === 'number') detailParts.push(`图片 ${value.imageCount}`);
+        if (value?.warnings?.length) detailParts.push(`提示 ${value.warnings.join('、')}`);
+        setRunStatus(title);
+        setRunEvents((prev) => appendRunEvent(prev, {
+          type: 'workflow_step',
+          phase: 'workflow',
+          label: title,
+          status,
+          data: {
+            type: 'workflow_step',
+            node,
+            status,
+            route: value?.route,
+            storyTitle: value?.storyTitle,
+            chapterDisplayName: value?.chapterDisplayName,
+            sceneCount: value?.sceneCount,
+            imageCount: value?.imageCount,
+            warnings: value?.warnings,
+            detail: detailParts.join(' · '),
+          },
+          createdAt: new Date().toISOString(),
+        }));
+        return null;
+      }
       if (agEvent.type === 'TOOL_CALL_START' || agEvent.type === 'TOOL_CALL_END' || agEvent.type === 'TOOL_CALL_RESULT') {
         const toolName = String((agEvent as any).toolCallName || (agEvent as any).toolName || 'tool');
-        setRunStatus(`工具处理中：${toolName}`);
+        setRunStatus(`宸ュ叿澶勭悊涓細${toolName}`);
         setRunEvents((prev) => appendRunEvent(prev, {
           type: agEvent.type.toLowerCase(),
           phase: 'tool',
@@ -689,7 +730,7 @@ export default function MangaAgentPage() {
           const payload = (value as { payload?: Record<string, unknown> } | undefined)?.payload || {};
           const tool = String(payload.tool || 'tool');
           const succeeded = payload.succeeded !== false;
-          setRunStatus(succeeded ? `工具已完成：${tool}` : `工具调用失败：${tool}`);
+          setRunStatus(succeeded ? `宸ュ叿宸插畬鎴愶細${tool}` : `宸ュ叿璋冪敤澶辫触锛?{tool}`);
           setRunEvents((prev) => appendRunEvent(prev, {
             type: 'tool',
             phase: 'tool',
@@ -727,7 +768,7 @@ export default function MangaAgentPage() {
               allowFreeText: metadata.allowFreeText,
               reason: interrupt?.reason,
             });
-            setRunStatus('等待你的选择');
+            setRunStatus('绛夊緟浣犵殑閫夋嫨');
             return { reply: '', requestId, waiting: true };
           }
         }
@@ -739,7 +780,7 @@ export default function MangaAgentPage() {
       if (agEvent.type === 'RUN_ERROR') {
         activeRequestIdRef.current = null;
         clearRunPoll();
-        return new Error(String((agEvent as any).message || '智能体请求失败'));
+        return new Error(String((agEvent as any).message || '鏅鸿兘浣撹姹傚け璐?));
       }
       return null;
     }
@@ -747,7 +788,7 @@ export default function MangaAgentPage() {
       const requestId = requestIdOf(event.data) ?? fallbackRequestId;
       activeRequestIdRef.current = requestId;
       setUserInputRequest({ ...event.data, requestId });
-      setRunStatus('等待你的选择');
+      setRunStatus('绛夊緟浣犵殑閫夋嫨');
       return { reply: '', requestId, waiting: true };
     }
     if (event.type === 'done') {
@@ -762,7 +803,7 @@ export default function MangaAgentPage() {
     if (event.type === 'error') {
       activeRequestIdRef.current = null;
       clearRunPoll();
-      return new Error(event.data.detail || event.data.error || '智能体请求失败');
+      return new Error(event.data.detail || event.data.error || '鏅鸿兘浣撹姹傚け璐?);
     }
     return null;
   };
@@ -790,7 +831,7 @@ export default function MangaAgentPage() {
       if (request) {
         setUserInputRequest({ ...request, requestId });
       }
-      setRunStatus('等待你的选择');
+      setRunStatus('绛夊緟浣犵殑閫夋嫨');
       setLoading(false);
       clearRunPoll();
       return;
@@ -799,7 +840,7 @@ export default function MangaAgentPage() {
     if (snapshot.status === 'RUNNING') {
       setLoading(true);
       if (!snapshot.events || snapshot.events.length === 0) {
-        setRunStatus('智能体仍在处理当前章节...');
+        setRunStatus('鏅鸿兘浣撲粛鍦ㄥ鐞嗗綋鍓嶇珷鑺?..');
       }
       scheduleRunPoll(Number(requestChapterId), requestId, requestChapterId, requestConversationId);
       return;
@@ -811,11 +852,11 @@ export default function MangaAgentPage() {
     setUserInputRequest(null);
     setDraftReply('');
     if (snapshot.status === 'FAILED') {
-      setError(snapshot.errorMessage || '智能体请求失败');
+      setError(snapshot.errorMessage || '鏅鸿兘浣撹姹傚け璐?);
     } else if (snapshot.status === 'CANCELLED') {
-      setRunStatus('本次运行已停止');
+      setRunStatus('鏈杩愯宸插仠姝?);
     } else if (snapshot.status === 'INTERRUPTED') {
-      setRunStatus(snapshot.errorMessage || '本次运行已中断，可以重新发起任务');
+      setRunStatus(snapshot.errorMessage || '鏈杩愯宸蹭腑鏂紝鍙互閲嶆柊鍙戣捣浠诲姟');
     }
     void reloadMessages(Number(requestChapterId), requestChapterId, requestConversationId);
   };
@@ -840,7 +881,7 @@ export default function MangaAgentPage() {
         }
       } catch (err: any) {
         if (chapterIdRef.current === requestChapterId && conversationIdRef.current === requestConversationId) {
-          setError(err.message || '同步智能体状态失败');
+          setError(err.message || '鍚屾鏅鸿兘浣撶姸鎬佸け璐?);
           setLoading(false);
         }
       }
@@ -857,7 +898,7 @@ export default function MangaAgentPage() {
     const requestId = createRequestId();
     setLoading(true);
     setError('');
-    setRunStatus('智能体已开始处理当前章节...');
+    setRunStatus('鏅鸿兘浣撳凡寮€濮嬪鐞嗗綋鍓嶇珷鑺?..');
     setMessages((prev) => [...prev, { role: 'user', content: text, requestId }]);
     setRunEvents([]);
     setDraftReply('');
@@ -882,7 +923,7 @@ export default function MangaAgentPage() {
       }
     } catch (err: any) {
       if (chapterIdRef.current !== requestChapterId || conversationIdRef.current !== requestConversationId) return;
-      setError(err.message || '请求失败');
+      setError(err.message || '璇锋眰澶辫触');
       try {
         const list = await getMangaAgentConversationMessages(id, requestConversationId);
         if (chapterIdRef.current === requestChapterId && conversationIdRef.current === requestConversationId) {
@@ -960,7 +1001,7 @@ export default function MangaAgentPage() {
       window.setTimeout(async () => {
         if (settled) return;
         controller?.abort();
-        setRunStatus('连接等待较久，正在同步后台运行状态...');
+        setRunStatus('杩炴帴绛夊緟杈冧箙锛屾鍦ㄥ悓姝ュ悗鍙拌繍琛岀姸鎬?..');
         try {
           const snapshot = await getMangaAgentConversationRunState(id, requestConversationId, requestId);
           restoreRunSnapshot(snapshot, requestChapterId, requestConversationId);
@@ -972,7 +1013,7 @@ export default function MangaAgentPage() {
             resolve({ reply: snapshot.finalReply || '', requestId });
           } else if (snapshot.status === 'FAILED') {
             settled = true;
-            reject(new Error(snapshot.errorMessage || '智能体请求失败'));
+            reject(new Error(snapshot.errorMessage || '鏅鸿兘浣撹姹傚け璐?));
           } else if (snapshot.status === 'CANCELLED' || snapshot.status === 'INTERRUPTED') {
             settled = true;
             resolve({ reply: '', requestId });
@@ -995,15 +1036,15 @@ export default function MangaAgentPage() {
     const requestId = activeRequestIdRef.current;
     if (!id || !requestConversationId || !requestId) return;
     setError('');
-    setRunStatus('正在停止本次运行...');
+    setRunStatus('姝ｅ湪鍋滄鏈杩愯...');
     try {
       const snapshot = await cancelMangaAgentConversationRun(id, requestConversationId, requestId);
       activeStreamControllerRef.current?.abort();
       activeStreamControllerRef.current = null;
       restoreRunSnapshot(snapshot, chapterId, requestConversationId);
-      setRunStatus('本次运行已停止');
+      setRunStatus('鏈杩愯宸插仠姝?);
     } catch (err: any) {
-      setError(err.message || '停止智能体运行失败');
+      setError(err.message || '鍋滄鏅鸿兘浣撹繍琛屽け璐?);
     }
   };
 
@@ -1015,7 +1056,7 @@ export default function MangaAgentPage() {
     if (!id || !requestConversationId || !requestId || loading) return;
     setLoading(true);
     setError('');
-    setRunStatus('已收到你的选择，智能体正在继续...');
+    setRunStatus('宸叉敹鍒颁綘鐨勯€夋嫨锛屾櫤鑳戒綋姝ｅ湪缁х画...');
     setUserInputRequest(null);
     setCustomAnswer('');
     activeRequestIdRef.current = requestId;
@@ -1033,7 +1074,7 @@ export default function MangaAgentPage() {
       setDraftReply('');
       setRunEvents([]);
     } catch (err: any) {
-      setError(err.message || '继续任务失败');
+      setError(err.message || '缁х画浠诲姟澶辫触');
     } finally {
       setLoading(false);
     }
@@ -1055,10 +1096,10 @@ export default function MangaAgentPage() {
       setDraftReply('');
       setUserInputRequest(null);
       setCustomAnswer('');
-      setRunStatus('已开启新对话');
+      setRunStatus('宸插紑鍚柊瀵硅瘽');
       activeRequestIdRef.current = null;
     } catch (err: any) {
-      setError(err.message || '开启新对话失败');
+      setError(err.message || '寮€鍚柊瀵硅瘽澶辫触');
     } finally {
       setHistoryLoading(false);
     }
@@ -1076,8 +1117,8 @@ export default function MangaAgentPage() {
             <Sparkles size={18} className="text-amber-300" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-white">墨染创作</h1>
-            <p className="text-sm text-gray-400">用对话串起分镜、章节与漫画生成的创作首页</p>
+            <h1 className="text-lg font-semibold text-white">澧ㄦ煋鍒涗綔</h1>
+            <p className="text-sm text-gray-400">鐢ㄥ璇濅覆璧峰垎闀溿€佺珷鑺備笌婕敾鐢熸垚鐨勫垱浣滈椤?/p>
           </div>
         </div>
       </header>
@@ -1086,13 +1127,13 @@ export default function MangaAgentPage() {
         <aside className="w-full shrink-0 rounded-3xl border border-white/10 bg-black/20 p-4 backdrop-blur-sm lg:w-[320px]">
           <div className="space-y-4">
             <div>
-              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-gray-500">故事</p>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-gray-500">鏁呬簨</p>
               <select
                 value={storyId}
                 onChange={(e) => setStoryId(e.target.value)}
                 className="w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-gray-100 outline-none transition focus:border-amber-400/50"
               >
-                {stories.length === 0 ? <option value="">暂无故事</option> : null}
+                {stories.length === 0 ? <option value="">鏆傛棤鏁呬簨</option> : null}
                 {stories.map((story) => (
                   <option key={story.id} value={story.id} className="bg-gray-900 text-gray-100">
                     {story.title}
@@ -1102,7 +1143,7 @@ export default function MangaAgentPage() {
             </div>
 
             <div>
-              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-gray-500">章节</p>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-gray-500">绔犺妭</p>
               <div className="relative">
                 <select
                   value={chapterId}
@@ -1110,11 +1151,10 @@ export default function MangaAgentPage() {
                   disabled={chapterLoading || chapters.length === 0}
                   className="w-full rounded-2xl border border-white/10 bg-white/5 px-3 py-3 text-sm text-gray-100 outline-none transition focus:border-amber-400/50 disabled:opacity-40"
                 >
-                  {chapters.length === 0 ? <option value="">暂无章节</option> : null}
+                  {chapters.length === 0 ? <option value="">鏆傛棤绔犺妭</option> : null}
                   {chapters.map((chapter) => (
                     <option key={chapter.id} value={chapter.id} className="bg-gray-900 text-gray-100">
-                      第 {chapter.chapter_number} 话
-                    </option>
+                      绗?{chapter.chapter_number} 璇?                    </option>
                   ))}
                 </select>
                 {chapterLoading && <Loader2 size={16} className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-gray-500" />}
@@ -1122,15 +1162,15 @@ export default function MangaAgentPage() {
             </div>
 
             <div className="rounded-3xl border border-amber-300/10 bg-amber-300/[0.06] p-4">
-              <p className="text-xs uppercase tracking-[0.22em] text-amber-200/70">当前工作台</p>
+              <p className="text-xs uppercase tracking-[0.22em] text-amber-200/70">褰撳墠宸ヤ綔鍙?/p>
               <div className="mt-3 space-y-2">
                 <div>
-                  <div className="text-xs text-gray-500">故事名</div>
-                  <div className="text-sm text-gray-100">{activeStory?.title || '未选择故事'}</div>
+                  <div className="text-xs text-gray-500">鏁呬簨鍚?/div>
+                  <div className="text-sm text-gray-100">{activeStory?.title || '鏈€夋嫨鏁呬簨'}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-gray-500">章节</div>
-                  <div className="text-sm text-gray-100">{activeChapter ? `第 ${activeChapter.chapter_number} 话` : '未选择章节'}</div>
+                  <div className="text-xs text-gray-500">绔犺妭</div>
+                  <div className="text-sm text-gray-100">{activeChapter ? `绗?${activeChapter.chapter_number} 璇漙 : '鏈€夋嫨绔犺妭'}</div>
                 </div>
               </div>
               <button
@@ -1139,12 +1179,11 @@ export default function MangaAgentPage() {
                 className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-200/20 bg-black/20 px-3 py-2 text-sm text-amber-100 transition hover:border-amber-200/40 hover:bg-amber-200/10 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Plus size={15} />
-                新对话
-              </button>
+                鏂板璇?              </button>
             </div>
 
             <div>
-              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-gray-500">快捷发起</p>
+              <p className="mb-2 text-xs uppercase tracking-[0.22em] text-gray-500">蹇嵎鍙戣捣</p>
               <div className="space-y-2">
                 {STARTER_PROMPTS.map((prompt) => (
                   <button
@@ -1167,8 +1206,8 @@ export default function MangaAgentPage() {
               <Bot size={18} className="text-gray-200" />
             </div>
             <div className="min-w-0">
-              <div className="text-sm font-medium text-white">漫画智能体</div>
-              <div className="text-xs text-gray-500">对话记录按当前章节和对话隔离保存</div>
+              <div className="text-sm font-medium text-white">婕敾鏅鸿兘浣?/div>
+              <div className="text-xs text-gray-500">瀵硅瘽璁板綍鎸夊綋鍓嶇珷鑺傚拰瀵硅瘽闅旂淇濆瓨</div>
             </div>
           </div>
 
@@ -1184,10 +1223,9 @@ export default function MangaAgentPage() {
                 <div className="mb-6 flex h-24 w-24 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] shadow-[0_0_60px_rgba(245,158,11,0.08)]">
                   <BookOpenText size={34} className="text-amber-200" />
                 </div>
-                <h2 className="text-3xl font-semibold text-white">墨染创作</h2>
+                <h2 className="text-3xl font-semibold text-white">澧ㄦ煋鍒涗綔</h2>
                 <p className="mt-3 max-w-xl text-sm leading-7 text-gray-400">
-                  从这一页开始，用对话推进你的漫画创作。选定故事与章节后，智能体会帮你检查上下文、生成分镜、整理下一步。
-                </p>
+                  浠庤繖涓€椤靛紑濮嬶紝鐢ㄥ璇濇帹杩涗綘鐨勬极鐢诲垱浣溿€傞€夊畾鏁呬簨涓庣珷鑺傚悗锛屾櫤鑳戒綋浼氬府浣犳鏌ヤ笂涓嬫枃銆佺敓鎴愬垎闀溿€佹暣鐞嗕笅涓€姝ャ€?                </p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -1218,7 +1256,7 @@ export default function MangaAgentPage() {
                             userInputRequest ? 'waiting' : latestRunSummary?.tone || (loading ? 'thinking' : 'neutral'),
                             userInputRequest ? 'question' : latestRunSummary?.icon || (loading ? 'sparkles' : 'clock'),
                           )}
-                          {userInputRequest ? '等待用户决策' : loading ? '运行中' : '最近执行记录'}
+                          {userInputRequest ? '绛夊緟鐢ㄦ埛鍐崇瓥' : loading ? '杩愯涓? : '鏈€杩戞墽琛岃褰?}
                         </span>
                         {visibleRequestId && (
                           <span className="inline-flex items-center rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-gray-300">
@@ -1234,7 +1272,7 @@ export default function MangaAgentPage() {
                             className="inline-flex items-center gap-1 rounded-full border border-red-400/30 bg-red-950/30 px-3 py-1 text-xs text-red-100 transition hover:border-red-300/60 hover:bg-red-900/40"
                           >
                             <Square size={12} />
-                            停止
+                            鍋滄
                           </button>
                         )}
                       </div>
@@ -1283,7 +1321,7 @@ export default function MangaAgentPage() {
                 {userInputRequest && (
                   <div className="flex justify-start">
                     <div className="max-w-[85%] rounded-3xl border border-amber-300/20 bg-amber-300/[0.06] px-4 py-4 text-sm text-gray-100">
-                      <div className="text-xs uppercase tracking-[0.18em] text-amber-200/70">需要你的决定</div>
+                      <div className="text-xs uppercase tracking-[0.18em] text-amber-200/70">闇€瑕佷綘鐨勫喅瀹?/div>
                       <div className="mt-2 text-base font-medium text-white">{userInputRequest.question}</div>
                       {userInputRequest.reason && <div className="mt-1 text-xs text-gray-400">{userInputRequest.reason}</div>}
                       <div className="mt-4 space-y-2">
@@ -1295,7 +1333,7 @@ export default function MangaAgentPage() {
                           >
                             <div className="flex items-center gap-2 text-sm font-medium text-white">
                               <span>{option.label}</span>
-                              {option.recommended && <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-[11px] text-amber-100">推荐</span>}
+                              {option.recommended && <span className="rounded-full bg-amber-300/15 px-2 py-0.5 text-[11px] text-amber-100">鎺ㄨ崘</span>}
                             </div>
                             {option.description && <div className="mt-1 text-xs leading-5 text-gray-400">{option.description}</div>}
                           </button>
@@ -1306,7 +1344,7 @@ export default function MangaAgentPage() {
                           <input
                             value={customAnswer}
                             onChange={(e) => setCustomAnswer(e.target.value)}
-                            placeholder="输入其他选择"
+                            placeholder="杈撳叆鍏朵粬閫夋嫨"
                             className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-gray-100 outline-none focus:border-amber-300/40"
                           />
                           <button
@@ -1314,7 +1352,7 @@ export default function MangaAgentPage() {
                             disabled={!customAnswer.trim()}
                             className="rounded-2xl bg-amber-300 px-4 py-2 text-sm font-medium text-gray-950 disabled:cursor-not-allowed disabled:opacity-40"
                           >
-                            继续
+                            缁х画
                           </button>
                         </div>
                       )}
@@ -1338,7 +1376,7 @@ export default function MangaAgentPage() {
                   }
                 }}
                 rows={2}
-                placeholder={chapterId ? '例如：帮我先检查这一话是否可以直接生成漫画' : '先在左侧选择故事和章节'}
+                placeholder={chapterId ? '渚嬪锛氬府鎴戝厛妫€鏌ヨ繖涓€璇濇槸鍚﹀彲浠ョ洿鎺ョ敓鎴愭极鐢? : '鍏堝湪宸︿晶閫夋嫨鏁呬簨鍜岀珷鑺?}
                 className="min-h-[58px] flex-1 resize-none rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-gray-100 outline-none transition placeholder:text-gray-500 focus:border-amber-300/40"
               />
               <button
@@ -1347,8 +1385,7 @@ export default function MangaAgentPage() {
                 className="inline-flex h-auto min-w-[110px] items-center justify-center gap-2 rounded-3xl bg-amber-300 px-4 py-3 text-sm font-medium text-gray-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                发送
-              </button>
+                鍙戦€?              </button>
             </div>
           </div>
         </main>

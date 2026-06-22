@@ -82,6 +82,12 @@ function useIsMobile() {
   return m;
 }
 
+function clearWorkspaceState() {
+  localStorage.removeItem(LS_STORY_ID);
+  localStorage.removeItem(LS_CHAPTER_ID);
+  localStorage.removeItem(LS_CHAPTER_IDX);
+}
+
 function ApiKeySettingsModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [dk, setDk] = useState('');
   const [ik, setIk] = useState('');
@@ -187,6 +193,7 @@ export default function App() {
       setLoginMessage('登录状态已过期，请重新登录');
       setPendingView(view === 'square' ? null : view);
       setLoginOpen(true);
+      clearWorkspaceState();
       if (view !== 'square') setView('square');
     };
     window.addEventListener('artverse:auth-expired', handleExpired);
@@ -224,9 +231,7 @@ export default function App() {
     setActiveStoryId(null);
     setChapters([]);
     setCurrentChapter(null);
-    localStorage.removeItem(LS_STORY_ID);
-    localStorage.removeItem(LS_CHAPTER_ID);
-    localStorage.removeItem(LS_CHAPTER_IDX);
+    clearWorkspaceState();
   };
 
   const refreshCurrentChapter = async () => {
@@ -314,6 +319,7 @@ export default function App() {
   const handleAuthSuccess = () => {
     setAuthenticated(true);
     setLoginOpen(false);
+    clearWorkspaceState();
     if (pendingView) {
       setView(pendingView);
       setPendingView(null);
@@ -370,7 +376,7 @@ export default function App() {
                 <KeyRound size={18} />
                 {sidebarOpen && <span>设置</span>}
               </button>
-              <button onClick={() => { logoutUser(); setAuthenticated(false); unloadEditor(); setView('home'); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-cream-dim hover:bg-ink-lighter hover:text-coral transition-colors">
+              <button onClick={() => { logoutUser(); setAuthenticated(false); unloadEditor(); clearWorkspaceState(); setView('home'); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-cream-dim hover:bg-ink-lighter hover:text-coral transition-colors">
                 <LogOut size={18} />
                 {sidebarOpen && <span>退出</span>}
               </button>

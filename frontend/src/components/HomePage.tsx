@@ -525,7 +525,7 @@ export default function HomePage({ onSelectStory }: Props) {
               <Sparkles size={18} className="text-cream" />
             </div>
             <div>
-              <h1 className="text-lg font-bold tracking-tight">LoreVista</h1>
+              <h1 className="text-lg font-bold tracking-tight">ArtVerse</h1>
               <p className="text-xs text-cream-dim">AI 小说 · 漫画工坊</p>
             </div>
           </div>

@@ -53,6 +53,7 @@ D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\CurrentUserService.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\ExportImportService.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\ImageGenService.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\MangaAgentConversationRegistry.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\MangaAgentConversationService.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\MangaAgentRunEventPublisher.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\MangaAgentRunService.java
@@ -66,6 +67,10 @@ D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\SquareService.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\StoryService.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\StructuredStoryboardService.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\workflow\MangaWorkflowContextAssembler.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\workflow\MangaWorkflowContextSnapshot.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\workflow\MangaWorkflowNode.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\workflow\MangaWorkflowRoute.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\application\WorksService.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\ArtVerseApplication.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\common\aspect\RateLimit.java
@@ -88,6 +93,8 @@ D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\ChatM
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\ColorMode.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\ContentSource.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\ImageGenRecord.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\MangaAgentConversation.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\MangaAgentConversationStatus.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\MangaAgentMessage.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\MangaAgentRun.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\domain\MangaAgentRunEventRecord.java
@@ -118,6 +125,7 @@ D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\CharacterProfileRepository.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\ChatMessageRepository.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\ImageGenRecordRepository.java
+D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\MangaAgentConversationRepository.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\MangaAgentMessageRepository.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\MangaAgentRunEventRepository.java
 D:\develop\Vibe Coding\ArtVerse\ArtVerse\src\main\java\com\artverse\persistence\MangaAgentRunRepository.java
