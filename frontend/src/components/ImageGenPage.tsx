@@ -1,3 +1,4 @@
+import type { ChangeEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Copy, Download, ImagePlus, Loader2, Send, Trash2, X } from 'lucide-react';
 import { generateImage, listImageGenHistory, deleteImageGenRecord, imageGenUrl, type ImageGenRecord } from '../api';
@@ -10,11 +11,91 @@ interface Message {
   record?: ImageGenRecord;
 }
 
+type RefFile = { file: File; preview: string };
+
+function Composer({
+  compact = false,
+  refFiles,
+  prompt,
+  generating,
+  canSend,
+  onPromptChange,
+  onAddRef,
+  onRemoveRef,
+  onSend,
+}: {
+  compact?: boolean;
+  refFiles: RefFile[];
+  prompt: string;
+  generating: boolean;
+  canSend: boolean;
+  onPromptChange: (value: string) => void;
+  onAddRef: (e: ChangeEvent<HTMLInputElement>) => void;
+  onRemoveRef: (idx: number) => void;
+  onSend: () => void;
+}) {
+  return (
+    <div className={compact ? 'w-full' : 'w-full max-w-5xl mx-auto'}>
+      <div className="overflow-hidden rounded-2xl border border-ink-border bg-ink-light/85 shadow-2xl shadow-coral/5">
+        <div className="p-4 sm:p-5">
+          {refFiles.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {refFiles.map((rf, i) => (
+                <div key={i} className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-ink-border bg-ink-lighter">
+                  <img src={rf.preview} alt={'ref ' + (i + 1)} className="h-full w-full object-cover" />
+                  <button
+                    onClick={() => onRemoveRef(i)}
+                    className="absolute right-0 top-0 rounded-bl-md bg-black/70 p-0.5 text-cream"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <textarea
+            value={prompt}
+            onChange={(e) => onPromptChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                onSend();
+              }
+            }}
+            placeholder="鎻忚堪浣犳兂瑕佺敓鎴愮殑鍐呭"
+            disabled={generating}
+            rows={compact ? 4 : 5}
+            className="w-full resize-none bg-transparent text-[17px] leading-7 text-cream outline-none placeholder:text-cream-dim"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 border-t border-ink-border px-3 py-3 sm:px-4">
+          <label className={'flex cursor-pointer items-center gap-2 rounded-xl border border-ink-border px-3 py-2 text-cream-dim transition-colors hover:bg-ink-lighter ' + (refFiles.length >= 3 ? 'pointer-events-none opacity-40' : '')}>
+            <ImagePlus size={16} />
+            <span className="text-sm">鍥剧墖</span>
+            <input type="file" accept="image/*" multiple onChange={onAddRef} className="hidden" />
+          </label>
+
+          <button
+            type="button"
+            onClick={onSend}
+            disabled={!canSend}
+            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-xl bg-coral text-cream transition-colors hover:bg-coral-light disabled:cursor-not-allowed disabled:opacity-30"
+          >
+            {generating ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ImageGenPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState('');
-  const [refFiles, setRefFiles] = useState<{ file: File; preview: string }[]>([]);
+  const [refFiles, setRefFiles] = useState<RefFile[]>([]);
   const [generating, setGenerating] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -45,12 +126,12 @@ export default function ImageGenPage() {
     [generating, prompt, refFiles.length],
   );
 
-  const handleAddRef = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddRef = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
     const remaining = 3 - refFiles.length;
     const toAdd = Math.min(files.length, remaining);
-    const newRefs: { file: File; preview: string }[] = [];
+    const newRefs: RefFile[] = [];
     for (let i = 0; i < toAdd; i++) {
       const f = files[i];
       if (f.size > 10 * 1024 * 1024) {
@@ -103,7 +184,7 @@ export default function ImageGenPage() {
     } catch (e: any) {
       setMessages((prev) => [
         ...prev,
-        { id: 'err-' + Date.now(), type: 'ai', prompt: '生成失败: ' + (e.message || '未知错误') },
+        { id: 'err-' + Date.now(), type: 'ai', prompt: '鐢熸垚澶辫触: ' + (e.message || '鏈煡閿欒') },
       ]);
     } finally {
       setGenerating(false);
@@ -115,65 +196,9 @@ export default function ImageGenPage() {
       await deleteImageGenRecord(id);
       setMessages((prev) => prev.filter((m) => m.id !== 'u-' + id && m.id !== 'a-' + id && m.id !== msgId));
     } catch (e: any) {
-      alert('删除失败: ' + (e.message || '未知错误'));
+      alert('鍒犻櫎澶辫触: ' + (e.message || '鏈煡閿欒'));
     }
   };
-
-  const Composer = ({ compact = false }: { compact?: boolean }) => (
-    <div className={compact ? 'w-full' : 'w-full max-w-5xl mx-auto'}>
-      <div className="overflow-hidden rounded-2xl border border-ink-border bg-ink-light/85 shadow-2xl shadow-coral/5">
-        <div className="p-4 sm:p-5">
-          {refFiles.length > 0 && (
-            <div className="mb-3 flex flex-wrap gap-2">
-              {refFiles.map((rf, i) => (
-                <div key={i} className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-ink-border bg-ink-lighter">
-                  <img src={rf.preview} alt={'ref ' + (i + 1)} className="h-full w-full object-cover" />
-                  <button
-                    onClick={() => removeRef(i)}
-                    className="absolute right-0 top-0 rounded-bl-md bg-black/70 p-0.5 text-cream"
-                  >
-                    <X size={10} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder="描述你想要生成的内容"
-            disabled={generating}
-            rows={compact ? 4 : 5}
-            className="w-full resize-none bg-transparent text-[17px] leading-7 text-cream outline-none placeholder:text-cream-dim"
-          />
-        </div>
-
-        <div className="flex items-center gap-2 border-t border-ink-border px-3 py-3 sm:px-4">
-          <label className={'flex cursor-pointer items-center gap-2 rounded-xl border border-ink-border px-3 py-2 text-cream-dim transition-colors hover:bg-ink-lighter ' + (refFiles.length >= 3 ? 'pointer-events-none opacity-40' : '')}>
-            <ImagePlus size={16} />
-            <span className="text-sm">图片</span>
-            <input type="file" accept="image/*" multiple onChange={handleAddRef} className="hidden" />
-          </label>
-
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!canSend}
-            className="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-xl bg-coral text-cream transition-colors hover:bg-coral-light disabled:cursor-not-allowed disabled:opacity-30"
-          >
-            {generating ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 
   if (loading) {
     return (
@@ -189,9 +214,18 @@ export default function ImageGenPage() {
         <div className="flex-1 flex items-center justify-center px-4">
           <div className="w-full max-w-5xl">
             <div className="mb-10 text-center">
-              <h2 className="text-4xl font-semibold tracking-tight text-cream sm:text-5xl">即刻创作 图片</h2>
+              <h2 className="text-4xl font-semibold tracking-tight text-cream sm:text-5xl">鍗冲埢鍒涗綔 鍥剧墖</h2>
             </div>
-            <Composer />
+            <Composer
+              refFiles={refFiles}
+              prompt={prompt}
+              generating={generating}
+              canSend={canSend}
+              onPromptChange={setPrompt}
+              onAddRef={handleAddRef}
+              onRemoveRef={removeRef}
+              onSend={handleSend}
+            />
           </div>
         </div>
       ) : (
@@ -226,7 +260,7 @@ export default function ImageGenPage() {
                       <div className="flex items-center justify-between text-xs text-cream-dim">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-cream">gpt-image-2</span>
-                          <span>1 张图片</span>
+                          <span>1 寮犲浘鐗?</span>
                         </div>
                         <span>{new Date(record.created_at).toLocaleString()}</span>
                       </div>
@@ -243,13 +277,13 @@ export default function ImageGenPage() {
                       </div>
 
                       <div className="flex items-center gap-2 text-cream-dim">
-                        <button className="rounded-lg p-2 hover:bg-ink-lighter" title="复制">
+                        <button className="rounded-lg p-2 hover:bg-ink-lighter" title="澶嶅埗">
                           <Copy size={14} />
                         </button>
-                        <a href={imageUrl} download className="rounded-lg p-2 hover:bg-ink-lighter" title="下载">
+                        <a href={imageUrl} download className="rounded-lg p-2 hover:bg-ink-lighter" title="涓嬭浇">
                           <Download size={14} />
                         </a>
-                        <button onClick={() => handleDelete(record.id, msg.id)} className="rounded-lg p-2 hover:bg-ink-lighter" title="删除">
+                        <button onClick={() => handleDelete(record.id, msg.id)} className="rounded-lg p-2 hover:bg-ink-lighter" title="鍒犻櫎">
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -268,7 +302,7 @@ export default function ImageGenPage() {
                 <div className="flex justify-start">
                   <div className="inline-flex items-center gap-2 rounded-2xl border border-ink-border bg-ink-light px-4 py-3 text-sm text-cream-dim shadow-sm">
                     <Loader2 size={16} className="animate-spin text-coral" />
-                    生成中...
+                    鐢熸垚涓?..
                   </div>
                 </div>
               )}
@@ -276,7 +310,17 @@ export default function ImageGenPage() {
           </div>
 
           <div className="border-t border-ink-border glass px-4 py-5 sm:px-6 lg:px-10">
-            <Composer compact />
+            <Composer
+              compact
+              refFiles={refFiles}
+              prompt={prompt}
+              generating={generating}
+              canSend={canSend}
+              onPromptChange={setPrompt}
+              onAddRef={handleAddRef}
+              onRemoveRef={removeRef}
+              onSend={handleSend}
+            />
           </div>
         </div>
       )}
