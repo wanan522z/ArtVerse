@@ -51,16 +51,38 @@ public class MangaWorkflowContextAssembler {
 
     private MangaWorkflowRoute routeFor(String userMessage, Chapter chapter) {
         String text = userMessage == null ? "" : userMessage.toLowerCase();
-        if (text.contains("重写") || text.contains("分镜")) {
+        if (isDirectorIntent(text)) {
             return MangaWorkflowRoute.DIRECTOR;
         }
-        if (text.contains("选择") || text.contains("决定") || text.contains("怎么做")) {
+        if (isHitlIntent(text)) {
             return MangaWorkflowRoute.HITL;
         }
-        if (chapter.getScenesText() != null && !chapter.getScenesText().isBlank()) {
+        if (isReviewIntent(text, chapter)) {
             return MangaWorkflowRoute.REVIEW;
         }
         return MangaWorkflowRoute.DIRECTOR;
+    }
+
+    private boolean isDirectorIntent(String text) {
+        return containsAny(text, "重写", "分镜", "重新生成", "重做", "生成分镜");
+    }
+
+    private boolean isHitlIntent(String text) {
+        return containsAny(text, "选择", "决定", "怎么做", "怎么选", "要不要", "如何处理");
+    }
+
+    private boolean isReviewIntent(String text, Chapter chapter) {
+        boolean hasStoryboard = chapter.getScenesText() != null && !chapter.getScenesText().isBlank();
+        return hasStoryboard && containsAny(text, "审查", "检查", "评估", "复查", "看看", "review");
+    }
+
+    private boolean containsAny(String text, String... keywords) {
+        for (String keyword : keywords) {
+            if (text.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private List<String> warningsFor(Chapter chapter, List<MangaImage> images) {
