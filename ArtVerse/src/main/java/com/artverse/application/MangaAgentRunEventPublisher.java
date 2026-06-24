@@ -29,12 +29,6 @@ public class MangaAgentRunEventPublisher {
         return new RunEventSink(emitter);
     }
 
-    /** @deprecated use {@link #newSink(SseEmitter)} */
-    @Deprecated
-    public RunEventSink agUiOnly(SseEmitter emitter) {
-        return newSink(emitter);
-    }
-
     public final class RunEventSink {
         private final SseEmitter emitter;
 

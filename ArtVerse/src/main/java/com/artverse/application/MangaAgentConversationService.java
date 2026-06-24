@@ -1,16 +1,20 @@
 package com.artverse.application;
 
 import com.artverse.agent.AgentMessage;
+import com.artverse.common.BusinessException;
 import com.artverse.domain.Chapter;
 import com.artverse.domain.MangaAgentConversation;
+import com.artverse.domain.MangaAgentConversationStatus;
 import com.artverse.domain.MangaAgentMessage;
 import com.artverse.domain.MessageRole;
 import com.artverse.domain.User;
+import com.artverse.persistence.MangaAgentConversationRepository;
 import com.artverse.persistence.MangaAgentMessageRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -24,8 +28,58 @@ public class MangaAgentConversationService {
 
     private static final int HISTORY_LIMIT_FOR_AGENT = 20;
 
+    private final MangaAgentConversationRepository conversationRepository;
     private final MangaAgentMessageRepository mangaAgentMessageRepository;
     private final ChapterAccessService chapterAccessService;
+
+    // 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓 conversation management 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
+
+    @Transactional(readOnly = true)
+    public List<MangaAgentConversation> listConversations(Long chapterId, User user) {
+        chapterAccessService.requireVisible(chapterId, user.getId());
+        return conversationRepository.findByUserIdAndChapterIdOrderByUpdatedAtDesc(user.getId(), chapterId);
+    }
+
+    @Transactional
+    public MangaAgentConversation activeOrCreate(Long chapterId, User user) {
+        Chapter chapter = chapterAccessService.requireVisible(chapterId, user.getId());
+        return conversationRepository.findFirstByUserIdAndChapterIdAndStatusOrderByUpdatedAtDesc(
+                        user.getId(),
+                        chapterId,
+                        MangaAgentConversationStatus.ACTIVE
+                )
+                .orElseGet(() -> conversationRepository.save(newConversation(user, chapter)));
+    }
+
+    @Transactional
+    public MangaAgentConversation createConversation(Long chapterId, User user) {
+        Chapter chapter = chapterAccessService.requireVisible(chapterId, user.getId());
+        conversationRepository.findFirstByUserIdAndChapterIdAndStatusOrderByUpdatedAtDesc(
+                user.getId(),
+                chapterId,
+                MangaAgentConversationStatus.ACTIVE
+        ).ifPresent(this::archiveConversation);
+        return conversationRepository.save(newConversation(user, chapter));
+    }
+
+    @Transactional(readOnly = true)
+    public MangaAgentConversation requireConversation(Long chapterId, User user, UUID conversationId) {
+        if (conversationId == null) {
+            throw new BusinessException(400, "conversationId is required");
+        }
+        chapterAccessService.requireVisible(chapterId, user.getId());
+        return conversationRepository.findByUserIdAndChapterIdAndConversationUuid(user.getId(), chapterId, conversationId)
+                .orElseThrow(() -> new BusinessException(404, "Agent conversation not found"));
+    }
+
+    @Transactional
+    public MangaAgentConversation archiveConversation(Long chapterId, User user, UUID conversationId) {
+        MangaAgentConversation conversation = requireConversation(chapterId, user, conversationId);
+        archiveConversation(conversation);
+        return conversationRepository.save(conversation);
+    }
+
+    // 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓 message management 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
 
     @Transactional(readOnly = true)
     public List<MangaAgentMessage> listMessages(Long chapterId, User user) {
@@ -104,82 +158,70 @@ public class MangaAgentConversationService {
     }
 
     public String resumeMessage(String originalInput, AgentUserInputRequest waiting, String answer) {
-        String selected = answer == null || answer.isBlank() ? "继续默认方案" : answer.trim();
+        String selected = answer == null || answer.isBlank() ? "Continue with default" : answer.trim();
         String question = waiting == null ? "" : waiting.question();
         return """
-                继续之前暂停的漫画智能体任务。
+                Continue from the previously suspended operation.
 
-                原始用户任务：
-                %s
+                Original input: %s
+                Question to resolve: %s
+                User answer: %s
 
-                暂停时需要用户决策：
-                %s
-
-                用户选择：
-                %s
-
-                请基于用户选择继续完成原始任务，不要重复询问同一个问题。
-                """.formatted(
-                originalInput == null || originalInput.isBlank() ? "继续当前漫画创作任务" : originalInput.trim(),
-                question == null || question.isBlank() ? "未记录具体问题" : question.trim(),
-                selected
-        ).trim();
-    }
-
-    public Map<String, Object> fallbackAfterToolSuccess(User user, Chapter chapter, UUID requestId,
-                                                        AgentRunToolStatus.RunState toolState, String error) {
-        String reply = fallbackReply(chapter, toolState);
-        saveMessage(user, chapter, MessageRole.ASSISTANT, reply, requestId);
-        saveMessage(user, chapter, MessageRole.SYSTEM, fallbackFailureContent(error, toolState), requestId);
-        return Map.of(
-                "reply", reply,
-                "agent_final_response_degraded", true
-        );
+                Resume execution with the confirmed approach.
+                """.formatted(originalInput, question, selected);
     }
 
     public Map<String, Object> fallbackAfterToolSuccess(MangaAgentConversation conversation, UUID requestId,
                                                         AgentRunToolStatus.RunState toolState, String error) {
-        String reply = fallbackReply(conversation.getChapter(), toolState);
-        saveMessage(conversation, MessageRole.ASSISTANT, reply, requestId);
-        saveMessage(conversation, MessageRole.SYSTEM, fallbackFailureContent(error, toolState), requestId);
+        AgentRunToolStatus.ToolEvent event = toolState.lastSuccessfulMutatingEvent();
+        String fallbackMessage = fallbackMessage(event);
+        saveMessage(conversation, MessageRole.ASSISTANT, fallbackMessage, requestId);
+        saveFailureMessage(conversation, error, requestId);
         return Map.of(
-                "reply", reply,
+                "reply", fallbackMessage,
                 "agent_final_response_degraded", true
         );
     }
 
-    private String failureContent(String error) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("type", "agent_run_failed");
-        payload.put("message", error == null || error.isBlank() ? "unknown error" : error);
-        return payload.toString();
+    // 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓 private helpers 閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓閳光偓
+
+    private MangaAgentConversation newConversation(User user, Chapter chapter) {
+        MangaAgentConversation conversation = new MangaAgentConversation();
+        conversation.setUser(user);
+        conversation.setStory(chapter.getStory());
+        conversation.setChapter(chapter);
+        conversation.setTitle("New chat");
+        conversation.setStatus(MangaAgentConversationStatus.ACTIVE);
+        return conversation;
     }
 
-    private String fallbackFailureContent(String error, AgentRunToolStatus.RunState toolState) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("type", "agent_run_degraded_after_tool_success");
-        payload.put("message", error == null || error.isBlank() ? "unknown error" : error);
-        AgentRunToolStatus.ToolEvent event = toolState.lastSuccessfulMutatingEvent();
-        if (event != null) {
-            payload.put("tool", event.toolName());
-            payload.put("scenes_count", event.result().getOrDefault("scenes_count", ""));
+    private void archiveConversation(MangaAgentConversation conversation) {
+        if (conversation.getStatus() == MangaAgentConversationStatus.ARCHIVED) {
+            return;
         }
-        return payload.toString();
+        OffsetDateTime now = OffsetDateTime.now();
+        conversation.setStatus(MangaAgentConversationStatus.ARCHIVED);
+        conversation.setArchivedAt(now);
+        conversation.setUpdatedAt(now);
     }
 
-    private String fallbackReply(Chapter chapter, AgentRunToolStatus.RunState toolState) {
-        AgentRunToolStatus.ToolEvent event = toolState.lastSuccessfulMutatingEvent();
-        Object scenesCount = event == null
-                ? chapter.getImageCount()
-                : event.result().getOrDefault("scenes_count", chapter.getImageCount());
-        String action = switch (event == null ? "" : event.toolName()) {
-            case "generate_storyboard" -> "分镜已经生成并保存";
-            case "save_storyboard", "save_structured_storyboard" -> "分镜已经重写并保存";
-            default -> "本次修改已经保存";
+    private static String failureContent(String error) {
+        return "[System: agent encountered an error] " + (error == null ? "unknown error" : error);
+    }
+
+    private String fallbackMessage(AgentRunToolStatus.ToolEvent event) {
+        if (event == null) {
+            return "Action has been saved to the current chapter, but the agent failed to produce a final response. Please refresh the storyboard and continue.";
+        }
+        int scenesCount = event.result().get("scenes_count") instanceof Number n ? n.intValue() : 0;
+        String action = switch (event.toolName() == null ? "" : event.toolName()) {
+            case "generate_storyboard" -> "Storyboard generated and saved";
+            case "save_storyboard", "save_structured_storyboard" -> "Storyboard rewritten and saved";
+            default -> "Changes saved";
         };
         return """
-                %s到当前章节，共%s页。
-                智能体已经完成了关键保存动作，但最终总结回复没有及时完成。你可以刷新分镜查看结果，继续让我润色，或者点击 Generate Manga 继续生成图片。
+                %s to the current chapter (%d pages).
+                The agent completed the key save action but the final summary response was not completed in time. You can refresh the storyboard to view results, continue refining, or click Generate Manga to proceed with image generation.
                 """.formatted(action, scenesCount).trim();
     }
 
@@ -195,7 +237,7 @@ public class MangaAgentConversationService {
                 Current user id: %s
                 Current story title: %s
                 Current display chapter number: %s
-                Current display chapter name: 第%s章
+                Current display chapter name: Chapter %s
                 The selected story and chapter in the left workspace are the only trusted target context.
                 If the user mentions another chapter, do not silently switch. Ask the user to switch the workspace first.
                 Never use any database id as a visible chapter number. When speaking to the user, only use the current display chapter name.

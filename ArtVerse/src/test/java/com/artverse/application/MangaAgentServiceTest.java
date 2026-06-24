@@ -1,9 +1,5 @@
 package com.artverse.application;
 
-import com.artverse.agent.AgentModelSpecFactory;
-import com.artverse.agent.gateway.AgentScopeEventMapper;
-import com.artverse.agent.AgentWorkspaceSyncService;
-import com.artverse.agent.AgentGateway;
 import com.artverse.application.workflow.MangaWorkflowOrchestrator;
 import com.artverse.common.BusinessException;
 import com.artverse.config.ArtVerseProperties;
@@ -13,15 +9,12 @@ import com.artverse.domain.MangaAgentConversation;
 import com.artverse.domain.MangaAgentConversationStatus;
 import com.artverse.domain.Story;
 import com.artverse.domain.User;
-import com.artverse.guard.GenerationGuardService;
+import com.artverse.persistence.MangaAgentConversationRepository;
 import com.artverse.persistence.MangaAgentMessageRepository;
-import com.artverse.persistence.MangaImageRepository;
 import org.junit.jupiter.api.Test;
-import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 
@@ -38,11 +31,11 @@ class MangaAgentServiceTest {
         Fixture fixture = fixture();
         UUID requestId = UUID.randomUUID();
         when(fixture.orchestrator.runWithToolState(any(), any(), any(), any()))
-                .thenReturn(Map.of("reply", "瀹屾垚"));
+                .thenReturn(Map.of("reply", "ok"));
 
         MangaAgentService.RunResult result = fixture.service.run(7L, "continue", requestId, fixture.user);
 
-        assertThat(result.reply()).isEqualTo("瀹屾垚");
+        assertThat(result.reply()).isEqualTo("ok");
     }
 
     @Test
@@ -65,50 +58,36 @@ class MangaAgentServiceTest {
 
     private Fixture fixture() {
         MangaAgentMessageRepository messageRepository = mock(MangaAgentMessageRepository.class);
-        AgentGateway gateway = mock(AgentGateway.class);
-        AgentWorkspaceSyncService syncService = mock(AgentWorkspaceSyncService.class);
-        ApiKeyService apiKeyService = mock(ApiKeyService.class);
+        MangaAgentConversationRepository conversationRepository = mock(MangaAgentConversationRepository.class);
         ChapterAccessService accessService = mock(ChapterAccessService.class);
-        GenerationGuardService guard = mock(GenerationGuardService.class);
         MangaAgentRunService runService = mock(MangaAgentRunService.class);
         MangaAgentRunEventPublisher eventPublisher = mock(MangaAgentRunEventPublisher.class);
         MangaWorkflowOrchestrator orchestrator = mock(MangaWorkflowOrchestrator.class);
-        MangaAgentConversationRegistry conversationRegistry = mock(MangaAgentConversationRegistry.class);
-        MangaImageRepository imageRepository = mock(MangaImageRepository.class);
-        CharacterProfileService characterProfileService = mock(CharacterProfileService.class);
         ArtVerseProperties properties = new ArtVerseProperties();
         AgentRunToolStatus toolStatus = new AgentRunToolStatus();
         properties.getAgent().setRunTimeoutSeconds(5);
-        properties.getDeepseek().setModel("deepseek-chat");
+
         User user = user(1L);
         Chapter chapter = chapter(user);
         MangaAgentConversation conversation = conversation(user, chapter);
         when(accessService.requireVisible(7L, 1L)).thenReturn(chapter);
-        when(imageRepository.findByChapterIdOrderByImageNumberAsc(7L)).thenReturn(List.of());
-        when(characterProfileService.resolveEffective(7L)).thenReturn(Map.of("content", "", "source", "none"));
-        when(conversationRegistry.activeOrCreate(7L, user)).thenReturn(conversation);
-        when(apiKeyService.getDecryptedKey(user, "deepseek")).thenReturn("deepseek-key");
-        when(apiKeyService.getDecryptedKey(user, "coze")).thenReturn("coze-key");
+        when(conversationRepository.findFirstByUserIdAndChapterIdAndStatusOrderByUpdatedAtDesc(
+                user.getId(), 7L, MangaAgentConversationStatus.ACTIVE))
+                .thenReturn(java.util.Optional.of(conversation));
+
         MangaAgentConversationService conversationService =
-                new MangaAgentConversationService(messageRepository, accessService);
+                new MangaAgentConversationService(conversationRepository, messageRepository, accessService);
         MangaAgentService service = new MangaAgentService(
                 conversationService,
-                conversationRegistry,
-                gateway,
-                new AgentModelSpecFactory(properties),
-                syncService,
-                apiKeyService,
-                accessService,
-                guard,
-                properties,
-                toolStatus,
-                new AgentScopeEventMapper(),
                 runService,
                 eventPublisher,
                 orchestrator,
+                toolStatus,
+                accessService,
+                properties,
                 Executors.newSingleThreadExecutor()
         );
-        return new Fixture(service, gateway, orchestrator, user);
+        return new Fixture(service, orchestrator, user);
     }
 
     private static User user(Long id) {
@@ -120,7 +99,7 @@ class MangaAgentServiceTest {
     private static Chapter chapter(User user) {
         Story story = new Story();
         story.setId(3L);
-        story.setTitle("鏁呬簨");
+        story.setTitle("Test Story");
         story.setUser(user);
         Chapter chapter = new Chapter();
         chapter.setId(7L);
@@ -138,13 +117,12 @@ class MangaAgentServiceTest {
         conversation.setUser(user);
         conversation.setStory(chapter.getStory());
         conversation.setChapter(chapter);
-        conversation.setTitle("娴嬭瘯瀵硅瘽");
+        conversation.setTitle("Test Conversation");
         conversation.setStatus(MangaAgentConversationStatus.ACTIVE);
         return conversation;
     }
 
     private record Fixture(MangaAgentService service,
-                           AgentGateway gateway,
                            MangaWorkflowOrchestrator orchestrator,
                            User user) {
     }
