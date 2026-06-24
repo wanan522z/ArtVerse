@@ -1,6 +1,7 @@
 package com.artverse.common;
 
 import cn.dev33.satoken.exception.NotLoginException;
+import cn.dev33.satoken.exception.NotRoleException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -10,7 +11,9 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @RestControllerAdvice
@@ -34,13 +37,25 @@ public class GlobalExceptionHandler {
                 "code", "AUTH_EXPIRED"));
     }
 
+    @ExceptionHandler(NotRoleException.class)
+    public ResponseEntity<Map<String, Object>> handleNotRole(NotRoleException ex) {
+        log.warn("Role check failed: {}", ex.getMessage());
+        return ResponseEntity.status(403).body(Map.of(
+                "detail", "权限不足"));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
+        List<Map<String, String>> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
+                .map(e -> Map.of("field", e.getField(), "message", e.getDefaultMessage()))
+                .collect(Collectors.toList());
         String detail = ex.getBindingResult().getFieldErrors().stream()
                 .map(e -> e.getField() + ": " + e.getDefaultMessage())
-                .findFirst()
-                .orElse("Validation failed");
-        return ResponseEntity.badRequest().body(Map.of("detail", detail));
+                .collect(Collectors.joining("; "));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("detail", detail);
+        body.put("errors", fieldErrors);
+        return ResponseEntity.badRequest().body(body);
     }
 
     @ExceptionHandler(Exception.class)
