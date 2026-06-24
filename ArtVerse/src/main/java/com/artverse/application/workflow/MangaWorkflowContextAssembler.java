@@ -26,7 +26,7 @@ public class MangaWorkflowContextAssembler {
     private final CharacterProfileService characterProfileService;
     private final MangaAgentConversationService conversationService;
 
-    public MangaWorkflowContextSnapshot assemble(MangaAgentConversation conversation, String userMessage, MangaWorkflowRoute route) {
+    public MangaWorkflowContextSnapshot assemble(MangaAgentConversation conversation, String userMessage) {
         Chapter chapter = conversation.getChapter();
         Story story = chapter.getStory();
         List<MangaImage> images = mangaImageRepository.findByChapterIdOrderByImageNumberAsc(chapter.getId());
@@ -44,9 +44,23 @@ public class MangaWorkflowContextAssembler {
                 excerpt(chapter.novelContentOrJoinedMessages(), EXCERPT_LIMIT),
                 excerpt(String.valueOf(characterProfile.getOrDefault("content", "")), EXCERPT_LIMIT),
                 summarizeConversation(history, userMessage),
-                route == null ? MangaWorkflowRoute.DIRECTOR : route,
+                routeFor(userMessage, chapter),
                 warningsFor(chapter, images)
         );
+    }
+
+    private MangaWorkflowRoute routeFor(String userMessage, Chapter chapter) {
+        String text = userMessage == null ? "" : userMessage.toLowerCase();
+        if (text.contains("重写") || text.contains("分镜")) {
+            return MangaWorkflowRoute.DIRECTOR;
+        }
+        if (text.contains("选择") || text.contains("决定") || text.contains("怎么做")) {
+            return MangaWorkflowRoute.HITL;
+        }
+        if (chapter.getScenesText() != null && !chapter.getScenesText().isBlank()) {
+            return MangaWorkflowRoute.REVIEW;
+        }
+        return MangaWorkflowRoute.DIRECTOR;
     }
 
     private List<String> warningsFor(Chapter chapter, List<MangaImage> images) {

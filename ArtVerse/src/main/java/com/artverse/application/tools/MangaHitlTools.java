@@ -1,6 +1,6 @@
 package com.artverse.application.tools;
 
-import com.artverse.agents.MangaAgentRuntimeContext;
+import com.artverse.agent.MangaAgentRuntimeContext;
 import com.artverse.application.AgentToolAuditService;
 import com.artverse.application.AgentUserInputRequest;
 import io.agentscope.core.agent.RuntimeContext;
@@ -32,13 +32,9 @@ public class MangaHitlTools {
         MangaAgentRuntimeContext context = support.resolveContext(runtimeContext);
         return agentToolAuditService.around("ask_user", context.userId(), context.chapterId(), runtimeContext, () -> {
             AgentUserInputRequest request = buildUserInputRequest(question, options, allowFreeText, reason);
-            support.requestUserInput(context.userId(), context.chapterId(), runtimeContext, request);
+            support.requestUserInput(context, request);
             throw new ToolSuspendException("Waiting for user input");
         });
-    }
-
-    public Map<String, Object> askUser(String question, Object options, Boolean allowFreeText, String reason) {
-        return askUser(question, options, allowFreeText, reason, null);
     }
 
     private AgentUserInputRequest buildUserInputRequest(String question, Object rawOptions,
@@ -46,12 +42,12 @@ public class MangaHitlTools {
         List<AgentUserInputRequest.Option> options = support.normalizeOptions(rawOptions);
         if (options.isEmpty()) {
             options = List.of(
-                    new AgentUserInputRequest.Option("a", "继续默认方案", "让智能体按当前上下文选择一个稳妥方案", true),
-                    new AgentUserInputRequest.Option("b", "先给出建议", "先不执行，让智能体说明推荐路径", false)
+                    new AgentUserInputRequest.Option("a", "Continue with default", "Let the agent decide based on context", true),
+                    new AgentUserInputRequest.Option("b", "Give suggestion first", "Agent explains recommendation before acting", false)
             );
         }
         return new AgentUserInputRequest(
-                question == null || question.isBlank() ? "需要你确认下一步怎么处理。" : question.trim(),
+                question == null || question.isBlank() ? "Please confirm how to proceed." : question.trim(),
                 options,
                 Boolean.TRUE.equals(allowFreeText),
                 reason == null ? "" : reason.trim()

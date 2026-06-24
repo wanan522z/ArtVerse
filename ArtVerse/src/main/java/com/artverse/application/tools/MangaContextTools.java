@@ -1,6 +1,6 @@
 package com.artverse.application.tools;
 
-import com.artverse.agents.MangaAgentRuntimeContext;
+import com.artverse.agent.MangaAgentRuntimeContext;
 import com.artverse.application.AgentToolAuditService;
 import com.artverse.application.ChapterAccessService;
 import com.artverse.application.SceneService;
@@ -58,9 +58,5 @@ public class MangaContextTools {
                     .toList());
             return result;
         });
-    }
-
-    public Map<String, Object> getChapterContext() {
-        return getChapterContext(null);
     }
 }

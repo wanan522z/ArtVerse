@@ -1,0 +1,17 @@
+package com.artverse.agent;
+
+public enum AgentTaskType {
+    CHAT("chat"),
+    NOVEL("novel"),
+    MANGA_DIRECTOR("manga-director");
+
+    private final String sessionSuffix;
+
+    AgentTaskType(String sessionSuffix) {
+        this.sessionSuffix = sessionSuffix;
+    }
+
+    public String sessionSuffix() {
+        return sessionSuffix;
+    }
+}

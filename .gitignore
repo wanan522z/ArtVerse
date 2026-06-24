@@ -27,3 +27,6 @@ frontend/build-*.txt
 frontend/build-error.txt
 sql.zip
 wechat_article_*.txt
+
+# 备份文件
+backup/

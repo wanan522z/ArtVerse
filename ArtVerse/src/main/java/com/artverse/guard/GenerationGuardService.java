@@ -1,6 +1,5 @@
 package com.artverse.guard;
 
-import com.artverse.application.workflow.MangaWorkflowResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -36,17 +35,15 @@ public class GenerationGuardService {
         );
     }
 
-    public MangaWorkflowResult executeMangaAgentRun(Long userId, Long chapterId, String requestId, String message,
+    public Map<String, Object> executeMangaAgentRun(Long userId, Long chapterId, String requestId, String message,
                                                     String provider, String model, String baseUrlHash,
-                                                    String route,
-                                                    Callable<MangaWorkflowResult> leader) {
-        Map<String, Object> payload = idempotencyService.executeHttp(
+                                                    Callable<Map<String, Object>> leader) {
+        return idempotencyService.executeHttp(
                 "manga-agent-run",
                 userKey(userId),
-                keyBuilder.mangaAgentRun(userId, chapterId, requestId, message, provider, model, baseUrlHash, route),
-                () -> leader.call().toPayload()
+                keyBuilder.mangaAgentRun(userId, chapterId, requestId, message, provider, model, baseUrlHash),
+                leader
         );
-        return MangaWorkflowResult.fromPayload(payload);
     }
 
     public Map<String, Object> executeImageRegeneration(Long userId, Long chapterId, int imageNumber, String prompt,
