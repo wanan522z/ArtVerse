@@ -8,7 +8,6 @@ import com.artverse.domain.MangaAgentRun;
 import com.artverse.domain.MangaAgentRunEventRecord;
 import com.artverse.domain.MangaAgentRunStatus;
 import com.artverse.domain.User;
-import com.artverse.application.workflow.MangaWorkflowRoute;
 import com.artverse.persistence.MangaAgentRunEventRepository;
 import com.artverse.persistence.MangaAgentRunRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -40,7 +39,7 @@ public class MangaAgentRunService {
     private final ObjectMapper objectMapper;
 
     @Transactional
-    public MangaAgentRun startOrReuse(User user, Chapter chapter, UUID requestId, String inputMessage, MangaWorkflowRoute route) {
+    public MangaAgentRun startOrReuse(User user, Chapter chapter, UUID requestId, String inputMessage) {
         return runRepository.findByUserIdAndChapterIdAndRequestId(user.getId(), chapter.getId(), requestId)
                 .map(existing -> {
                     if (existing.getStatus() == MangaAgentRunStatus.WAITING_USER) {
@@ -48,9 +47,6 @@ public class MangaAgentRunService {
                         existing.setUserInputRequestJson(null);
                         existing.setErrorMessage(null);
                         existing.setUpdatedAt(OffsetDateTime.now());
-                    }
-                    if (route != null) {
-                        existing.setRoute(route);
                     }
                     return runRepository.save(existing);
                 })
@@ -62,13 +58,12 @@ public class MangaAgentRunService {
                     run.setRequestId(requestId);
                     run.setInputMessage(inputMessage);
                     run.setStatus(MangaAgentRunStatus.RUNNING);
-                    run.setRoute(route == null ? MangaWorkflowRoute.DIRECTOR : route);
                     return runRepository.save(run);
                 });
     }
 
     @Transactional
-    public MangaAgentRun startOrReuse(MangaAgentConversation conversation, UUID requestId, String inputMessage, MangaWorkflowRoute route) {
+    public MangaAgentRun startOrReuse(MangaAgentConversation conversation, UUID requestId, String inputMessage) {
         return runRepository.findByConversationIdAndRequestId(conversation.getId(), requestId)
                 .map(existing -> {
                     if (existing.getStatus() == MangaAgentRunStatus.WAITING_USER) {
@@ -76,9 +71,6 @@ public class MangaAgentRunService {
                         existing.setUserInputRequestJson(null);
                         existing.setErrorMessage(null);
                         existing.setUpdatedAt(OffsetDateTime.now());
-                    }
-                    if (route != null) {
-                        existing.setRoute(route);
                     }
                     return runRepository.save(existing);
                 })
@@ -91,19 +83,8 @@ public class MangaAgentRunService {
                     run.setRequestId(requestId);
                     run.setInputMessage(inputMessage);
                     run.setStatus(MangaAgentRunStatus.RUNNING);
-                    run.setRoute(route == null ? MangaWorkflowRoute.DIRECTOR : route);
                     return runRepository.save(run);
                 });
-    }
-
-    @Transactional
-    public MangaAgentRun startOrReuse(User user, Chapter chapter, UUID requestId, String inputMessage) {
-        return startOrReuse(user, chapter, requestId, inputMessage, MangaWorkflowRoute.DIRECTOR);
-    }
-
-    @Transactional
-    public MangaAgentRun startOrReuse(MangaAgentConversation conversation, UUID requestId, String inputMessage) {
-        return startOrReuse(conversation, requestId, inputMessage, MangaWorkflowRoute.DIRECTOR);
     }
 
     @Transactional(readOnly = true)
@@ -114,11 +95,6 @@ public class MangaAgentRunService {
     @Transactional(readOnly = true)
     public Optional<MangaAgentRun> findRun(MangaAgentConversation conversation, UUID requestId) {
         return runRepository.findByConversationIdAndRequestId(conversation.getId(), requestId);
-    }
-
-    @Transactional(readOnly = true)
-    public MangaWorkflowRoute routeOf(MangaAgentRun run) {
-        return routeOrDefault(run);
     }
 
     @Transactional(readOnly = true)
@@ -326,7 +302,6 @@ public class MangaAgentRunService {
                 .toList();
         return new RunSnapshot(
                 run.getRequestId(),
-                routeOrDefault(run),
                 run.getStatus(),
                 run.getInputMessage(),
                 run.getFinalReply(),
@@ -427,13 +402,8 @@ public class MangaAgentRunService {
         return value == null ? null : String.valueOf(value);
     }
 
-    private MangaWorkflowRoute routeOrDefault(MangaAgentRun run) {
-        return run == null || run.getRoute() == null ? MangaWorkflowRoute.DIRECTOR : run.getRoute();
-    }
-
     public record RunSnapshot(
             UUID requestId,
-            MangaWorkflowRoute route,
             MangaAgentRunStatus status,
             String inputMessage,
             String finalReply,

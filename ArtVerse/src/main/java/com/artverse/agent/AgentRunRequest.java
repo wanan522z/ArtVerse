@@ -1,4 +1,4 @@
-package com.artverse.agents;
+package com.artverse.agent;
 
 import java.util.List;
 import java.util.Map;
@@ -14,22 +14,11 @@ public record AgentRunRequest(
     AgentModelSpec modelSpec,
     String userApiKey,
     UUID requestId,
-    UUID conversationId,
-    List<String> activeToolGroups
+    UUID conversationId
 ) {
-    public AgentRunRequest(String userId, Long storyId, Long chapterId, AgentTaskType taskType,
-                           List<AgentMessage> messages, Map<String, Object> variables) {
-        this(userId, storyId, chapterId, taskType, messages, variables, null, null, null, null, List.of());
-    }
-
-    public AgentRunRequest(String userId, Long storyId, Long chapterId, AgentTaskType taskType,
-                           List<AgentMessage> messages, Map<String, Object> variables, String userApiKey) {
-        this(userId, storyId, chapterId, taskType, messages, variables, null, userApiKey, null, null, List.of());
-    }
-
     public AgentRunRequest(String userId, Long storyId, Long chapterId, AgentTaskType taskType,
                            List<AgentMessage> messages, Map<String, Object> variables,
                            AgentModelSpec modelSpec, String userApiKey) {
-        this(userId, storyId, chapterId, taskType, messages, variables, modelSpec, userApiKey, null, null, List.of());
+        this(userId, storyId, chapterId, taskType, messages, variables, modelSpec, userApiKey, null, null);
     }
 }

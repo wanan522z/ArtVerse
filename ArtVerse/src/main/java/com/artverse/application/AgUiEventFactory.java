@@ -31,15 +31,10 @@ public class AgUiEventFactory {
         Map<String, Object> event = base(EVENT_RUN_STARTED);
         event.put("threadId", threadId(run));
         event.put("runId", runId(requestId));
-        event.put("route", routeName(run));
         event.put("input", Map.of(
                 "threadId", threadId(run),
                 "runId", runId(requestId),
-                "state", Map.of(
-                        "status", "RUNNING",
-                        "message", message == null ? "" : message,
-                        "route", routeName(run)
-                ),
+                "state", Map.of("status", "RUNNING", "message", message == null ? "" : message),
                 "messages", java.util.List.of(),
                 "tools", java.util.List.of(),
                 "context", java.util.List.of(),
@@ -55,8 +50,7 @@ public class AgUiEventFactory {
                 "runId", runId(requestId),
                 "requestId", runId(requestId),
                 "status", status,
-                "message", message == null ? "" : message,
-                "route", routeName(run)
+                "message", message == null ? "" : message
         ));
         return event;
     }
@@ -169,10 +163,6 @@ public class AgUiEventFactory {
 
     private String assistantMessageId(UUID requestId) {
         return "assistant-" + runId(requestId);
-    }
-
-    private String routeName(MangaAgentRun run) {
-        return run == null || run.getRoute() == null ? "DIRECTOR" : run.getRoute().name();
     }
 
     private Map<String, Object> rawRunEvent(AgentRunEvent event) {

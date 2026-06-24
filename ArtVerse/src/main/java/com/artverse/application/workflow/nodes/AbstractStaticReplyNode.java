@@ -6,6 +6,7 @@ import com.artverse.application.workflow.MangaWorkflowNodeHandler;
 import com.artverse.application.workflow.MangaWorkflowResult;
 import com.artverse.application.workflow.MangaWorkflowStreamContext;
 import com.artverse.domain.MessageRole;
+import java.util.Map;
 
 abstract class AbstractStaticReplyNode implements MangaWorkflowNodeHandler {
 
@@ -16,13 +17,13 @@ abstract class AbstractStaticReplyNode implements MangaWorkflowNodeHandler {
     }
 
     @Override
-    public final MangaWorkflowResult run(MangaWorkflowExecutionContext context) {
-        return reply(context);
+    public final Map<String, Object> run(MangaWorkflowExecutionContext context) {
+        return reply(context).toPayload();
     }
 
     @Override
-    public final MangaWorkflowResult stream(MangaWorkflowExecutionContext context, MangaWorkflowStreamContext streamContext) {
-        return reply(context);
+    public final Map<String, Object> stream(MangaWorkflowExecutionContext context, MangaWorkflowStreamContext streamContext) {
+        return reply(context).toPayload();
     }
 
     protected final MangaWorkflowResult reply(MangaWorkflowExecutionContext context) {

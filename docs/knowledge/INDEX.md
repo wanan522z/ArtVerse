@@ -1,11 +1,10 @@
-﻿# ArtVerse Business Knowledge Index
+# ArtVerse Business Knowledge Index
 
 Use this index to route AI-assisted development to the smallest useful business knowledge file.
 
 ## Active Skills
 
 - `modules/manga-agent/SKILL.md`: use for Manga Agent chat, AgentScope execution, SSE run lifecycle, human-in-the-loop resume, tool calls, run event persistence, and the frontend Manga Agent panel.
-- `modules/auth/SKILL.md`: use for Sa-Token authentication, login/register flows, token lifecycle (cookie-based httpOnly), rate limiting architecture, role-based access control (USER/ADMIN), password policy, and auth-related DTO validation.
 
 ## Planned Skills
 

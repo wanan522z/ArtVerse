@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import com.artverse.domain.Role;
 import java.time.OffsetDateTime;
 
 @Entity
@@ -26,7 +27,7 @@ public class User {
     private String passwordHash;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(name = "role", nullable = false, length = 20)
     private Role role = Role.USER;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -34,9 +35,6 @@ public class User {
 
     @PrePersist
     protected void onCreate() {
-        if (role == null) {
-            role = Role.USER;
-        }
         createdAt = OffsetDateTime.now();
     }
 }
