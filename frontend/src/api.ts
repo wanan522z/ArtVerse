@@ -171,19 +171,17 @@ export async function saveUserApiKey(provider: string, apiKey: string): Promise<
 
 
 function apiHeaders(json = false): HeadersInit {
-  const token = getSaToken();
   return {
     ...(json ? { 'Content-Type': 'application/json' } : {}),
-    ...(token ? { 'satoken': token } : {}),
   };
 }
 
 async function authFetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
-  let res = await fetch(input, { ...init, headers: { ...apiHeaders(), ...(init?.headers || {}) } });
+  let res = await fetch(input, { ...init, credentials: 'same-origin', headers: { ...apiHeaders(), ...(init?.headers || {}) } });
   if (res.status === 401) {
     const refreshed = await tryRefreshToken();
     if (refreshed) {
-      res = await fetch(input, { ...init, headers: { ...apiHeaders(), ...(init?.headers || {}) } });
+      res = await fetch(input, { ...init, credentials: 'same-origin', headers: { ...apiHeaders(), ...(init?.headers || {}) } });
     } else {
       notifyAuthExpired();
     }
