@@ -129,7 +129,7 @@ class MangaAgentConversationServiceTest {
             saved.add(message);
             return message;
         });
-        return new Fixture(service, messageRepository, accessService, user, chapter, conversation, saved);
+        return new Fixture(service, conversationRepository, messageRepository, accessService, user, chapter, conversation, saved);
     }
 
     private static User user(Long id) {
@@ -176,6 +176,7 @@ class MangaAgentConversationServiceTest {
     }
 
     private record Fixture(MangaAgentConversationService service,
+                           MangaAgentConversationRepository conversationRepository,
                            MangaAgentMessageRepository messageRepository,
                            ChapterAccessService accessService,
                            User user,

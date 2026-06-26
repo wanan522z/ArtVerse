@@ -65,13 +65,15 @@ interface ExecutionEventItem {
 }
 
 const WORKFLOW_ROUTES: Array<{ value: MangaWorkflowRoute; label: string; description: string }> = [
+  { value: 'AUTO', label: '自动', description: '先识别用户意图，再进入合适的任务模式' },
   { value: 'DIRECTOR', label: '导演', description: '规划章节、生成或修订分镜' },
   { value: 'REVIEW', label: '质检', description: '检查现有分镜和下一步风险' },
   { value: 'HITL', label: '决策', description: '收束需要用户确认的选择' },
+  { value: 'CHAT', label: '聊天', description: '只回答问题，不修改章节内容' },
 ];
 
 function routeLabel(route: MangaWorkflowRoute | string | undefined): string {
-  return WORKFLOW_ROUTES.find((item) => item.value === route)?.label || '导演';
+  return WORKFLOW_ROUTES.find((item) => item.value === route)?.label || '自动';
 }
 
 function conversationStatusLabel(status?: string): string {
@@ -219,19 +221,37 @@ function inferExecutionEvent(event: Record<string, any>): ExecutionEventItem {
   if (type === 'CUSTOM') {
     const name = String(event.name || '自定义事件');
     const value = asRecord(event.value);
+    const data = asRecord(value.data);
+    if (name === 'intent_classified' || value.type === 'intent_classified') {
+      const selectedRoute = String(data.selectedRoute || value.selectedRoute || value.route || '');
+      const rawConfidence = typeof data.confidence === 'number' ? data.confidence : value.confidence;
+      const confidence = typeof rawConfidence === 'number' ? Math.round(rawConfidence * 100) : null;
+      const reason = String(data.reason || value.reason || '');
+      const requiresConfirmation = Boolean(data.requiresConfirmation ?? value.requiresConfirmation);
+      return {
+        id: `${type}-${name}-${createdAt || Date.now()}`,
+        type,
+        title: '用户意图识别完成',
+        detail: `识别为 ${routeLabel(selectedRoute)} 模式${confidence == null ? '' : ` · 置信度 ${confidence}%`}${reason ? ` · ${reason}` : ''}`,
+        createdAt,
+        tone: requiresConfirmation ? 'waiting' : 'thinking',
+        icon: requiresConfirmation ? 'question' : 'sparkles',
+      };
+    }
     const tool = String(value.tool || value.toolName || '');
     const label = String(value.label || value.title || name);
     const detailParts: string[] = [];
     if (tool) detailParts.push(`工具：${tool}`);
     if (value.status) detailParts.push(`状态：${value.status}`);
-    if (value.node) detailParts.push(`节点：${value.node}`);
-    if (value.route) detailParts.push(`模式：${value.route}`);
-    if (Array.isArray(value.warnings) && value.warnings.length) detailParts.push(`警告：${value.warnings.join('；')}`);
+    if (data.status && !value.status) detailParts.push(`状态：${data.status}`);
+    if (data.node) detailParts.push(`节点：${data.node}`);
+    if (data.route) detailParts.push(`模式：${routeLabel(String(data.route))}`);
+    if (Array.isArray(data.warnings) && data.warnings.length) detailParts.push(`警告：${data.warnings.join('；')}`);
     return {
       id: `${type}-${name}-${createdAt || Date.now()}`,
       type,
       title: label,
-      detail: detailParts.length > 0 ? detailParts.join(' · ') : '智能体已执行自定义业务事件',
+      detail: detailParts.length > 0 ? detailParts.join(' · ') : label,
       createdAt,
       tone: tool || name.includes('tool') ? 'tool' : 'neutral',
       icon: tool || name.includes('tool') ? 'wrench' : 'sparkles',
@@ -239,12 +259,11 @@ function inferExecutionEvent(event: Record<string, any>): ExecutionEventItem {
   }
 
   if (type === 'RUN_FINISHED') {
-    const reply = String(event.result?.reply || event.outcome?.type || 'success');
     return {
       id: `${type}-${createdAt || Date.now()}`,
       type,
       title: '运行完成',
-      detail: reply ? `已完成：${reply}` : '本次运行已结束',
+      detail: '回复已保存到对话',
       createdAt,
       tone: 'success',
       icon: 'check',
@@ -340,7 +359,7 @@ export default function MangaAgentPage() {
   const [conversationLoading, setConversationLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
-  const [workflowRoute, setWorkflowRoute] = useState<MangaWorkflowRoute>('DIRECTOR');
+  const [workflowRoute, setWorkflowRoute] = useState<MangaWorkflowRoute>('AUTO');
   const [userInputRequest, setUserInputRequest] = useState<AgentUserInputRequest | null>(null);
   const [customAnswer, setCustomAnswer] = useState('');
   const [draftReply, setDraftReply] = useState('');
@@ -577,9 +596,15 @@ export default function MangaAgentPage() {
 
     if (rawEvent.type === 'CUSTOM') {
       const value = asRecord(rawEvent.value);
+      const data = asRecord(value.data);
       const status = String(value.status || '');
       if (status) setBusinessStatus(status);
       if (value.message) setRunStatus(String(value.message));
+      const selectedRoute = data.selectedRoute || value.selectedRoute;
+      if (rawEvent.name === 'intent_classified' && selectedRoute) {
+        setWorkflowRoute(selectedRoute as MangaWorkflowRoute);
+        setRunStatus(`已识别为${routeLabel(String(selectedRoute))}模式`);
+      }
     }
 
     if (rawEvent.type === 'TEXT_MESSAGE_CONTENT' || rawEvent.type === 'TEXT_MESSAGE_START') {
@@ -639,6 +664,7 @@ export default function MangaAgentPage() {
     try {
       const list = await getMangaAgentConversationMessages(chapterNumericId, selectedConversationId);
       setMessages(toMessages(list));
+      setDraftReply('');
     } catch {
       // ignore refresh failure; live state still exists
     }
@@ -967,7 +993,7 @@ export default function MangaAgentPage() {
 
             <div>
               <p className="mb-2 text-xs uppercase tracking-[0.22em] text-gray-500">模式</p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 {WORKFLOW_ROUTES.map((route) => {
                   const selected = workflowRoute === route.value;
                   return (

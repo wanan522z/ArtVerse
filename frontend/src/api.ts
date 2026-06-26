@@ -1155,7 +1155,7 @@ export interface MangaAgentConversation {
   archivedAt?: string | null;
 }
 
-export type MangaWorkflowRoute = 'DIRECTOR' | 'HITL' | 'REVIEW';
+export type MangaWorkflowRoute = 'AUTO' | 'CHAT' | 'DIRECTOR' | 'HITL' | 'REVIEW';
 
 export type MangaAgentRunEvent =
   | { type: 'status'; data: { message?: string; requestId?: string; request_id?: string } }
