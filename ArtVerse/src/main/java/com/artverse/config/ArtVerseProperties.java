@@ -126,5 +126,12 @@ public class ArtVerseProperties {
     public static class Agent {
         private int runTimeoutSeconds = 180;
         private int staleRunningSeconds = 600;
+        private IntentClassification intentClassification = new IntentClassification();
+
+        @Data
+        public static class IntentClassification {
+            private boolean enabled = true;
+            private int timeoutSeconds = 8;
+        }
     }
 }
