@@ -4,7 +4,6 @@ import io.agentscope.core.agent.Agent;
 import io.agentscope.core.agent.RuntimeContext;
 import io.agentscope.core.event.AgentEvent;
 import io.agentscope.core.event.ToolResultEndEvent;
-import io.agentscope.core.interruption.InterruptSource;
 import io.agentscope.core.middleware.ActingInput;
 import io.agentscope.core.middleware.MiddlewareBase;
 import reactor.core.publisher.Flux;
@@ -12,12 +11,14 @@ import reactor.core.publisher.Flux;
 import java.util.function.Function;
 
 /**
- * Middleware that detects when the {@code ask_user} tool returns a suspended result
- * and triggers an agent interrupt, preventing the agent from continuing execution
- * until the user provides input.
+ * Middleware for HITL (Human-in-the-Loop) flow.
  * <p>
- * This replaces the deprecated {@link io.agentscope.core.hook.Hook}-based
- * AgentScopeHitlSuspendHook.
+ * With the v2 external tool pattern, the agent automatically pauses when an
+ * external tool returns {@link ToolResultState#RUNNING}. The framework emits
+ * {@link io.agentscope.core.event.RequireExternalExecutionEvent} and handles
+ * the interrupt — no manual {@code InterruptControl.trigger()} needed.
+ * <p>
+ * This middleware only monitors and logs for observability.
  */
 public class AgentScopeHitlSuspendMiddleware implements MiddlewareBase {
 
@@ -31,10 +32,9 @@ public class AgentScopeHitlSuspendMiddleware implements MiddlewareBase {
                 .doOnNext(event -> {
                     if (event instanceof ToolResultEndEvent tre
                             && ASK_USER_TOOL.equals(tre.getToolCallName())) {
-                        // The ask_user tool has completed; trigger an interrupt
-                        // to suspend agent execution and wait for user input.
-                        ctx.getAgentState().interruptControl()
-                                .trigger(InterruptSource.TOOL, null);
+                        // v2 framework already emits RequireExternalExecutionEvent
+                        // and pauses the agent when externalTool returns RUNNING.
+                        // No manual interrupt needed.
                     }
                 });
     }
