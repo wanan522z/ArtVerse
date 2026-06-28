@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Send, Image, Square, MessageSquare, FileText, Save } from 'lucide-react';
 import { chatStream, importNovel, type Chapter } from '../api';
+import MarkdownRenderer from './MarkdownRenderer';
 
 type Mode = 'chat' | 'import';
 const MAX_IMPORT_CHARS = 50000;
@@ -266,13 +267,13 @@ export default function ChatPanel({ chapter, onMessageSent, onChapterRefresh, on
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div
-                  className={`max-w-[80%] px-4 py-2.5 rounded-xl text-sm leading-relaxed whitespace-pre-wrap ${
+                  className={`max-w-[80%] px-4 py-2.5 rounded-xl text-sm leading-relaxed ${
                     msg.role === 'user'
                       ? 'bg-vermilion-light/40 text-sumi rounded-br-sm'
                       : 'bg-paper-raised border border-paper-border text-sumi rounded-bl-sm shadow-sm'
                   }`}
                 >
-                  {msg.content}
+                  <MarkdownRenderer content={msg.content} />
                 </div>
               </div>
             ))}
@@ -289,8 +290,8 @@ export default function ChatPanel({ chapter, onMessageSent, onChapterRefresh, on
             )}
             {streaming && streamContent && (
               <div className="flex justify-start">
-                <div className="max-w-[80%] px-4 py-2.5 rounded-xl rounded-bl-sm bg-paper-raised border border-paper-border text-sumi text-sm leading-relaxed whitespace-pre-wrap shadow-sm relative">
-                  {streamContent}
+                <div className="max-w-[80%] px-4 py-2.5 rounded-xl rounded-bl-sm bg-paper-raised border border-paper-border text-sumi text-sm leading-relaxed shadow-sm relative">
+                  <MarkdownRenderer content={streamContent} />
                   <span className="inline-block w-1.5 h-4 ml-0.5 bg-vermilion rounded-sm" style={{ animation: 'cursor-blink 1s step-end infinite' }} />
                 </div>
               </div>
