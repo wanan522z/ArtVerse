@@ -35,7 +35,7 @@ import com.artverse.domain.Chapter;
 import com.artverse.domain.MangaAgentMessage;
 import com.artverse.domain.MessageRole;
 import com.artverse.domain.User;
-import io.agentscope.core.tool.ToolSuspendException;
+import io.agentscope.core.event.RequireExternalExecutionEvent;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -86,9 +86,6 @@ public class MangaDirectorAgentNode implements MangaWorkflowNodeHandler {
             return Map.of("reply", reply);
         } catch (AgentUserInputRequiredException e) {
             throw e;
-        } catch (ToolSuspendException e) {
-            throwIfWaitingForUser(context);
-            throw new BusinessException(502, "Agent tool suspended without user input");
         } catch (CallNotPermittedException e) {
             log.warn("Circuit breaker open for agent LLM, fast-failing request={}", context.requestId());
             throw new BusinessException(503, "AI 服务暂时不可用，请稍后重试");
@@ -148,9 +145,6 @@ public class MangaDirectorAgentNode implements MangaWorkflowNodeHandler {
             return Map.of("reply", "");
         } catch (AgentUserInputRequiredException e) {
             throw e;
-        } catch (ToolSuspendException e) {
-            throwIfWaitingForUser(context);
-            throw new BusinessException(502, "Agent tool suspended without user input");
         } catch (CallNotPermittedException e) {
             log.warn("Circuit breaker open for agent LLM, fast-failing request={}", context.requestId());
             throw new BusinessException(503, "AI 服务暂时不可用，请稍后重试");
@@ -269,6 +263,14 @@ public class MangaDirectorAgentNode implements MangaWorkflowNodeHandler {
         }
         if (event instanceof ThinkingBlockDeltaEvent) {
             return Optional.empty();
+        }
+        if (event instanceof RequireExternalExecutionEvent ext) {
+            return Optional.of(new AgentRunEvent(
+                    "external_exec_required", "waiting_input", "等待用户确认",
+                    null, "waiting", null,
+                    Map.of("toolCalls", ext.getToolCalls()),
+                    OffsetDateTime.now()
+            ));
         }
         if (event instanceof ToolCallStartEvent tool) {
             return Optional.of(AgentRunEvent.tool(
