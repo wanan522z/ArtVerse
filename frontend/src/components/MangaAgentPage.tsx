@@ -1114,46 +1114,46 @@ export default function MangaAgentPage({ onCreateStory }: { onCreateStory?: () =
           <div className="border-t border-paper-border px-4 py-3">
             {/* Story / Chapter / Model row */}
             <div className="mb-3 flex items-center gap-2">
-              {/* Story selector */}
-              <select
-                value={storyId}
-                onChange={(e) => setStoryId(e.target.value)}
-                className="w-[120px] shrink-0 truncate rounded-xl border border-paper-border bg-paper-surface/80 px-3 py-1.5 text-xs font-medium text-sumi outline-none transition hover:border-sumi-faint/40 focus:border-vermilion focus:bg-paper-raised appearance-none cursor-pointer"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238B8680' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                  backgroundPosition: 'right 6px center',
-                  backgroundRepeat: 'no-repeat',
-                  backgroundSize: '16px 16px',
-                  paddingRight: '28px',
-                }}
-              >
-                {stories.length === 0 ? <option value="">暂无故事</option> : null}
-                {stories.map((story) => (
-                  <option key={story.id} value={story.id}>{story.title}</option>
-                ))}
-              </select>
+              {/* Story selector — label overlay for truncation */}
+              <div className="relative w-[120px] shrink-0">
+                <div className="truncate rounded-xl border border-paper-border bg-paper-surface/80 px-3 py-1.5 text-xs font-medium text-sumi pointer-events-none">
+                  {stories.find(s => String(s.id) === storyId)?.title || '暂无故事'}
+                </div>
+                <select
+                  value={storyId}
+                  onChange={(e) => setStoryId(e.target.value)}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                >
+                  {stories.length === 0 ? <option value="">暂无故事</option> : null}
+                  {stories.map((story) => (
+                    <option key={story.id} value={story.id}>{story.title}</option>
+                  ))}
+                </select>
+                {/* Chevron */}
+                <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sumi-faint" width="14" height="14" viewBox="0 0 20 20" fill="none"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M6 8l4 4 4-4"/></svg>
+              </div>
 
-              {/* Chapter selector */}
+              {/* Chapter selector — label overlay for truncation */}
               <div className="relative w-[100px] shrink-0">
+                <div className={'truncate rounded-xl border border-paper-border px-3 py-1.5 text-xs font-medium pointer-events-none ' + (chapterLoading || chapters.length === 0 ? 'bg-paper-surface/40 text-sumi-faint/60' : 'bg-paper-surface/80 text-sumi')}>
+                  {chapters.find(c => String(c.id) === chapterId) ? `第${chapters.find(c => String(c.id) === chapterId)!.chapter_number} 章` : chapterLoading ? '加载中…' : '暂无章节'}
+                </div>
                 <select
                   value={chapterId}
                   onChange={(e) => setChapterId(e.target.value)}
                   disabled={chapterLoading || chapters.length === 0}
-                  className="w-full truncate rounded-xl border border-paper-border bg-paper-surface/80 px-3 py-1.5 text-xs font-medium text-sumi outline-none transition hover:border-sumi-faint/40 focus:border-vermilion focus:bg-paper-raised disabled:opacity-40 appearance-none cursor-pointer"
-                  style={{
-                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238B8680' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                    backgroundPosition: 'right 4px center',
-                    backgroundRepeat: 'no-repeat',
-                    backgroundSize: '14px 14px',
-                    paddingRight: '24px',
-                  }}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                 >
                   {chapters.length === 0 ? <option value="">暂无章节</option> : null}
                   {chapters.map((chapter) => (
                     <option key={chapter.id} value={chapter.id}>第{chapter.chapter_number} 章</option>
                   ))}
                 </select>
-                {chapterLoading && <Loader2 size={12} className="absolute right-6 top-1/2 -translate-y-1/2 animate-spin text-sumi-faint" />}
+                {chapterLoading ? (
+                  <Loader2 size={12} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 animate-spin text-sumi-faint" />
+                ) : (
+                  <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-sumi-faint" width="14" height="14" viewBox="0 0 20 20" fill="none"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M6 8l4 4 4-4"/></svg>
+                )}
               </div>
 
               {/* Divider */}
