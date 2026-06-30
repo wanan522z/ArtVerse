@@ -16,6 +16,7 @@ import {
   TriangleAlert,
   Wrench,
 } from 'lucide-react';
+import ModelSwitcher from './ModelSwitcher';
 import {
   API_KEY_CHANGE_EVENT,
   cancelMangaAgentConversationRun,
@@ -351,7 +352,6 @@ export default function MangaAgentPage({ onCreateStory }: { onCreateStory?: () =
   const [chapterId, setChapterId] = useState('');
   const [conversations, setConversations] = useState<ConversationView[]>([]);
   const [conversationId, setConversationId] = useState('');
-  const [llmModels, setLlmModels] = useState<string[]>(() => getProviderModelOptions('llm'));
   const [selectedLlmModel, setSelectedLlmModel] = useState(() => getPrimaryProviderModel('llm'));
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -390,7 +390,6 @@ export default function MangaAgentPage({ onCreateStory }: { onCreateStory?: () =
   useEffect(() => {
     const syncModels = () => {
       const options = getProviderModelOptions('llm');
-      setLlmModels(options);
       setSelectedLlmModel((prev) => (prev && options.includes(prev) ? prev : (options[0] || '')));
     };
     syncModels();
@@ -1154,19 +1153,13 @@ export default function MangaAgentPage({ onCreateStory }: { onCreateStory?: () =
           </div>
 
           <div className="border-t border-paper-border p-3">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-[11px] text-sumi-faint">模型</span>
-              <select
-                value={selectedLlmModel}
-                onChange={(e) => setSelectedLlmModel(e.target.value)}
-                disabled={sending || conversationLoading || llmModels.length === 0}
-                className="max-w-[280px] rounded-md border border-paper-border bg-paper-base px-2.5 py-1.5 text-xs text-sumi outline-none transition focus:border-vermilion disabled:opacity-40"
-              >
-                {llmModels.length === 0 ? <option value="">未配置模型</option> : null}
-                {llmModels.map((model) => (
-                  <option key={model} value={model}>{model}</option>
-                ))}
-              </select>
+            <div className="mb-2 flex items-center justify-end gap-2">
+              <ModelSwitcher
+                capability="llm"
+                selectedModel={selectedLlmModel}
+                onSelect={setSelectedLlmModel}
+                disabled={sending || conversationLoading}
+              />
             </div>
             <div className="flex gap-2.5">
               <textarea
