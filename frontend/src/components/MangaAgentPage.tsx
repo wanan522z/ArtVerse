@@ -68,6 +68,71 @@ interface ExecutionEventItem {
   icon: 'bot' | 'sparkles' | 'wrench' | 'question' | 'check' | 'warning' | 'clock' | 'message' | 'archive';
 }
 
+/* ------------------------------------------------------------------ */
+/*  Lightweight upward-opening select                                 */
+/* ------------------------------------------------------------------ */
+
+function SelectUpward<T extends string>({
+  value,
+  label,
+  options,
+  onChange,
+  disabled,
+  width,
+}: {
+  value: T;
+  label: string;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+  disabled?: boolean;
+  width: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+
+  const display = options.find(o => o.value === value)?.label || label;
+
+  return (
+    <div ref={ref} className={`relative ${width} shrink-0`}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => { if (!disabled) setOpen(v => !v); }}
+        className={`flex w-full items-center gap-1 truncate rounded-xl border px-3 py-1.5 text-xs font-medium transition outline-none ${open ? 'border-vermilion/40 bg-vermilion-light/10 text-vermilion' : 'border-paper-border bg-paper-surface/80 text-sumi hover:border-sumi-faint/40'}`}
+      >
+        <span className="truncate flex-1 text-left">{display}</span>
+        <svg className={`shrink-0 text-sumi-faint transition-transform ${open ? 'rotate-180' : ''}`} width="12" height="12" viewBox="0 0 20 20" fill="none"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M6 8l4 4 4-4"/></svg>
+      </button>
+      {open && (
+        <div className="absolute bottom-[calc(100%+4px)] left-0 z-40 w-full max-h-[200px] overflow-y-auto overscroll-contain rounded-xl border border-paper-border bg-paper-raised shadow-lg animate-fade-in p-1">
+          {options.map(o => {
+            const sel = o.value === value;
+            return (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => { onChange(o.value); setOpen(false); }}
+                className={`w-full truncate rounded-lg px-2.5 py-2 text-xs text-left transition-colors ${sel ? 'bg-vermilion-light/20 text-vermilion font-medium' : 'text-sumi hover:bg-paper-surface'}`}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const WORKFLOW_ROUTES: Array<{ value: MangaWorkflowRoute; label: string }> = [
   { value: 'DIRECTOR', label: '导演' },
 ];
@@ -1114,47 +1179,24 @@ export default function MangaAgentPage({ onCreateStory }: { onCreateStory?: () =
           <div className="border-t border-paper-border px-4 py-3">
             {/* Story / Chapter / Model row */}
             <div className="mb-3 flex items-center gap-2">
-              {/* Story selector — label overlay for truncation */}
-              <div className="relative w-[120px] shrink-0">
-                <div className="truncate rounded-xl border border-paper-border bg-paper-surface/80 px-3 py-1.5 text-xs font-medium text-sumi pointer-events-none">
-                  {stories.find(s => String(s.id) === storyId)?.title || '暂无故事'}
-                </div>
-                <select
-                  value={storyId}
-                  onChange={(e) => setStoryId(e.target.value)}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                >
-                  {stories.length === 0 ? <option value="">暂无故事</option> : null}
-                  {stories.map((story) => (
-                    <option key={story.id} value={story.id}>{story.title}</option>
-                  ))}
-                </select>
-                {/* Chevron */}
-                <svg className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-sumi-faint" width="14" height="14" viewBox="0 0 20 20" fill="none"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M6 8l4 4 4-4"/></svg>
-              </div>
+              {/* Story selector — opens upward */}
+              <SelectUpward
+                value={storyId}
+                label="暂无故事"
+                width="w-[120px]"
+                options={stories.length === 0 ? [{ value: '', label: '暂无故事' }] : stories.map(s => ({ value: String(s.id), label: s.title }))}
+                onChange={(v) => setStoryId(v)}
+              />
 
-              {/* Chapter selector — label overlay for truncation */}
-              <div className="relative w-[100px] shrink-0">
-                <div className={'truncate rounded-xl border border-paper-border px-3 py-1.5 text-xs font-medium pointer-events-none ' + (chapterLoading || chapters.length === 0 ? 'bg-paper-surface/40 text-sumi-faint/60' : 'bg-paper-surface/80 text-sumi')}>
-                  {chapters.find(c => String(c.id) === chapterId) ? `第${chapters.find(c => String(c.id) === chapterId)!.chapter_number} 章` : chapterLoading ? '加载中…' : '暂无章节'}
-                </div>
-                <select
-                  value={chapterId}
-                  onChange={(e) => setChapterId(e.target.value)}
-                  disabled={chapterLoading || chapters.length === 0}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {chapters.length === 0 ? <option value="">暂无章节</option> : null}
-                  {chapters.map((chapter) => (
-                    <option key={chapter.id} value={chapter.id}>第{chapter.chapter_number} 章</option>
-                  ))}
-                </select>
-                {chapterLoading ? (
-                  <Loader2 size={12} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 animate-spin text-sumi-faint" />
-                ) : (
-                  <svg className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-sumi-faint" width="14" height="14" viewBox="0 0 20 20" fill="none"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M6 8l4 4 4-4"/></svg>
-                )}
-              </div>
+              {/* Chapter selector — opens upward */}
+              <SelectUpward
+                value={chapterId}
+                label={chapterLoading ? '加载中…' : '暂无章节'}
+                width="w-[100px]"
+                disabled={chapterLoading || chapters.length === 0}
+                options={chapters.length === 0 ? [{ value: '', label: '暂无章节' }] : chapters.map(c => ({ value: String(c.id), label: `第${c.chapter_number} 章` }))}
+                onChange={(v) => setChapterId(v)}
+              />
 
               {/* Divider */}
               <span className="mx-0.5 h-5 w-px shrink-0 bg-paper-border" />
