@@ -1111,36 +1111,57 @@ export default function MangaAgentPage({ onCreateStory }: { onCreateStory?: () =
             )}
           </div>
 
-          <div className="border-t border-paper-border p-3">
+          <div className="border-t border-paper-border px-4 py-3">
             {/* Story / Chapter / Model row */}
-            <div className="mb-2 flex items-center gap-2">
-              <span className="text-[11px] text-sumi-faint/70 shrink-0">📖</span>
+            <div className="mb-3 flex items-center gap-2">
+              {/* Story selector */}
               <select
                 value={storyId}
                 onChange={(e) => setStoryId(e.target.value)}
-                className="min-w-0 flex-1 rounded-lg border border-paper-border bg-paper-surface px-2 py-1.5 text-xs text-sumi outline-none transition focus:border-vermilion"
+                className="w-[120px] shrink-0 truncate rounded-xl border border-paper-border bg-paper-surface/80 px-3 py-1.5 text-xs font-medium text-sumi outline-none transition hover:border-sumi-faint/40 focus:border-vermilion focus:bg-paper-raised appearance-none cursor-pointer"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238B8680' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                  backgroundPosition: 'right 6px center',
+                  backgroundRepeat: 'no-repeat',
+                  backgroundSize: '16px 16px',
+                  paddingRight: '28px',
+                }}
               >
                 {stories.length === 0 ? <option value="">暂无故事</option> : null}
                 {stories.map((story) => (
                   <option key={story.id} value={story.id}>{story.title}</option>
                 ))}
               </select>
-              <span className="text-[11px] text-sumi-faint/40">·</span>
-              <div className="relative min-w-0 flex-1">
+
+              {/* Chapter selector */}
+              <div className="relative w-[100px] shrink-0">
                 <select
                   value={chapterId}
                   onChange={(e) => setChapterId(e.target.value)}
                   disabled={chapterLoading || chapters.length === 0}
-                  className="w-full rounded-lg border border-paper-border bg-paper-surface px-2 py-1.5 text-xs text-sumi outline-none transition focus:border-vermilion disabled:opacity-40"
+                  className="w-full truncate rounded-xl border border-paper-border bg-paper-surface/80 px-3 py-1.5 text-xs font-medium text-sumi outline-none transition hover:border-sumi-faint/40 focus:border-vermilion focus:bg-paper-raised disabled:opacity-40 appearance-none cursor-pointer"
+                  style={{
+                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238B8680' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                    backgroundPosition: 'right 4px center',
+                    backgroundRepeat: 'no-repeat',
+                    backgroundSize: '14px 14px',
+                    paddingRight: '24px',
+                  }}
                 >
                   {chapters.length === 0 ? <option value="">暂无章节</option> : null}
                   {chapters.map((chapter) => (
                     <option key={chapter.id} value={chapter.id}>第{chapter.chapter_number} 章</option>
                   ))}
                 </select>
-                {chapterLoading && <Loader2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-sumi-faint" />}
+                {chapterLoading && <Loader2 size={12} className="absolute right-6 top-1/2 -translate-y-1/2 animate-spin text-sumi-faint" />}
               </div>
-              <span className="text-[11px] text-sumi-faint/40 mx-0.5">|</span>
+
+              {/* Divider */}
+              <span className="mx-0.5 h-5 w-px shrink-0 bg-paper-border" />
+
+              {/* Spacer — pushes model switcher to the right */}
+              <div className="flex-1" />
+
               <ModelSwitcher
                 capability="llm"
                 selectedModel={selectedLlmModel}
